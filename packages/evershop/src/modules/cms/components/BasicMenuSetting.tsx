@@ -28,7 +28,8 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import React, { useEffect } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useWidgetSettings } from '@components/common/page-builder/WidgetContext.js';
+import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
 import CreatableSelect from 'react-select/creatable';
 import uniqid from 'uniqid';
 import { useQuery } from 'urql';
@@ -325,17 +326,32 @@ const MenuSettingPopup: React.FC<{
 };
 
 interface BasicMenuSettingProps {
-  basicMenuWidget: {
-    menus: MenuItem[];
-    isMain: boolean;
-    className: string;
+  // Optional: page-builder drawer mounts this without GraphQL props.
+  basicMenuWidget?: {
+    menus?: MenuItem[];
+    isMain?: boolean;
+    className?: string;
   };
 }
 
 export default function BasicMenuSetting({
-  basicMenuWidget: { menus, isMain, className }
+  basicMenuWidget
 }: BasicMenuSettingProps) {
-  const { register, setValue } = useFormContext();
+  // The GraphQL prop is populated on the standalone widgetEdit page; in the
+  // page-builder drawer it isn't (no per-widget query is merged there).
+  // Fall through to the widget's persisted settings from WidgetContext —
+  // both `<WidgetChrome>` and the storefront's `<WidgetContextProvider>`
+  // expose them, so this is reliable in both contexts.
+  const widgetSettings = useWidgetSettings();
+  const menus: MenuItem[] =
+    basicMenuWidget?.menus ??
+    ((widgetSettings.menus as MenuItem[] | undefined) ?? []);
+  const isMain: boolean =
+    basicMenuWidget?.isMain ?? Boolean(widgetSettings.isMain ?? false);
+  const className: string =
+    basicMenuWidget?.className ??
+    ((widgetSettings.className as string | undefined) ?? '');
+  const { register, setValue } = useScopedFormContext();
   const [items, setItems] = React.useState(menus);
   const [dialogOpen, setDialogOpen] = React.useState(false);
 

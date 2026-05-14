@@ -1,13 +1,17 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { FileBrowser } from '@components/admin/FileBrowser.js';
 import { InputField } from '@components/common/form/InputField.js';
+import {
+  useScopedFieldName,
+  useScopedFormContext
+} from '@components/common/page-builder/WidgetSettingsScope.js';
 import { Button } from '@components/common/ui/Button.js';
 import { Checkbox } from '@components/common/ui/Checkbox.js';
 import { Input } from '@components/common/ui/Input.js';
 import { Item, ItemContent, ItemTitle } from '@components/common/ui/Item.js';
 import { Label } from '@components/common/ui/Label.js';
 import React, { useEffect } from 'react';
-import { useFieldArray, useFormContext } from 'react-hook-form';
+import { useFieldArray } from 'react-hook-form';
 import { v4 as uuidv4 } from 'uuid';
 
 interface SlideData {
@@ -51,10 +55,14 @@ export default function SlideshowSetting({
     heightType = 'auto'
   } = slideshowWidget || {};
 
-  const { control, setValue, watch } = useFormContext();
+  const { control, setValue, watch } = useScopedFormContext();
+  // useFieldArray takes a literal path against the form's root, so we
+  // pre-resolve it through the scope for use inside this hook only. The
+  // setValue/watch above are already scope-aware.
+  const slidesArrayName = useScopedFieldName('settings.slides');
   const { fields, append, remove, move } = useFieldArray({
     control,
-    name: 'settings.slides'
+    name: slidesArrayName as 'settings.slides'
   });
 
   const currentSlides = watch('settings.slides', slides);

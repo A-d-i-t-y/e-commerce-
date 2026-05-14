@@ -1,19 +1,95 @@
 """
-Lookup Widget by ID
+A widget instance. The schema renamed the underlying table to widget_instance
+in cms migration 1.3.0; the GraphQL type kept the name `Widget` for clients.
+Container children are stored as regular `widget_placement` rows with a
+synthetic `area = columnsContainer_<parent_uuid>_col_<index>` — there is no
+parent FK on `widget_instance`.
 """
 type Widget {
+  """
+  Deprecated. Alias for widgetInstanceId, kept while existing admin UI queries
+  still reference widgetId.
+  """
   widgetId: Int
+  widgetInstanceId: Int
   uuid: String!
   name: String!
   type: String!
-  area: [String!]
-  route: [String!]
-  sortOrder: Int!
   status: Int!
-  settings: JSON!
+
+  """
+  Typed settings — a member of the WidgetSettings union if this widget type
+  registered a `graphql` block, else null. Clients use inline fragments:
+  `settings { ... on CollectionProductsSettings { count } }`. For generic
+  access during the migration window, use `rawSettings`.
+  """
+  settings: WidgetSettings
+
+  """
+  The raw settings JSON object as stored. Bridge during the migration to
+  typed settings — to be removed once all widgets register a `graphql` block
+  and all storefront/admin queries use typed fragments.
+  """
+  rawSettings: JSON!
+
+  """
+  Placements for this widget instance — one row per (route, area) cell. A
+  container child has placements whose `area` starts with
+  `columnsContainer_<parent_uuid>_col_`.
+  """
+  placements: [WidgetPlacement!]!
+
+  """
+  For container widgets: their child columns, derived from placements whose
+  `area` starts with `columnsContainer_<this_uuid>_col_`. Empty list for
+  non-containers.
+  """
+  columns: [WidgetColumn!]!
+
+  """
+  Deprecated. Distinct routes from this widget's placements. Use `placements`
+  for full detail.
+  """
+  route: [String!]
+
+  """
+  Deprecated. Distinct areas from this widget's placements. Use `placements`
+  for full detail.
+  """
+  area: [String!]
+
+  """
+  Deprecated. The first placement's sort_order, or 0 if no placements.
+  Use `placements[].sortOrder` instead.
+  """
+  sortOrder: Int!
+
   editUrl: String!
   updateApi: String!
   deleteApi: String!
+}
+
+"""
+A placement of a widget instance on a particular (route, area) cell. Optional
+entity_urn allows entity-level overrides (e.g. for a specific CMS page).
+"""
+type WidgetPlacement {
+  widgetPlacementId: Int!
+  uuid: String!
+  route: String!
+  area: String!
+  sortOrder: Int!
+  entityUrn: String
+}
+
+"""
+A column inside a container widget. Children of the container are placements
+whose `area` matches `columnsContainer_<parent_uuid>_col_<index>`, grouped by
+the parsed column index and ordered by the placement's `sortOrder`.
+"""
+type WidgetColumn {
+  index: Int!
+  widgets: [Widget!]!
 }
 
 """
@@ -23,6 +99,11 @@ type WidgetType {
   code: String!
   name: String!
   description: String!
+  """
+  Optional category used by the page builder palette to group widgets:
+  `content`, `commerce`, `navigation`, `marketing`, or `layout`.
+  """
+  category: String
   createWidgetUrl: String!
   settingComponent: String!
   component: String!
@@ -45,6 +126,14 @@ Return a text Widget
 type TextBlockWidget {
   text: JSON
   className: String
+}
+
+"""
+Container widget — renders columns containing child widgets.
+"""
+type ColumnsWidget {
+  columnCount: Int!
+  gap: Int!
 }
 
 """
@@ -135,10 +224,21 @@ type SlideshowWidget {
 
 extend type Query {
   widget(id: Int): Widget
+  widgetByUuid(uuid: String!): Widget
   widgets(filters: [FilterInput]): WidgetCollection
+  """
+  Widgets currently rendered on the given route (top-level only — children
+  of container widgets are returned nested inside their parent's `columns`).
+  When `changeset` is provided, the named changeset's draft ops are applied
+  as an overlay before filtering/grouping so the result matches what the
+  page-builder iframe renders for that token. Without `changeset`, returns
+  source state only.
+  """
+  widgetsForRoute(route: String!, changeset: String): [Widget!]!
   widgetTypes: [WidgetType]
   widgetType(code: String!): WidgetType
   textWidget(text: String, className: String): TextBlockWidget
+  columnsWidget(columnCount: Int, gap: Int): ColumnsWidget
   basicMenuWidget(settings: JSON): BasicMenuWidget
   bannerWidget(
     src: String

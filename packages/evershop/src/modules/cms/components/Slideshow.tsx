@@ -1,4 +1,5 @@
 import { Image } from '@components/common/Image.js';
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
@@ -151,7 +152,7 @@ export default function Slideshow({
   return (
     <div className={containerClasses} style={containerStyle}>
       <SliderComponent {...settings} style={sliderStyle}>
-        {slides.map((slide) => (
+        {slides.map((slide, slideIdx) => (
           <div
             key={slide.id}
             className="relative lg:h-auto slide__wrapper !block"
@@ -179,15 +180,24 @@ export default function Slideshow({
                   (slide.buttonText && slide.buttonLink)) && (
                   <div className="p-4 md:p-8 rounded-lg max-w-3xl">
                     {slide.headline && (
-                      <h2 className="text-white text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 drop-shadow-lg">
+                      <Editable
+                        as="h2"
+                        fieldPath={`settings.slides.${slideIdx}.headline`}
+                        className="text-white text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 drop-shadow-lg"
+                      >
                         {slide.headline}
-                      </h2>
+                      </Editable>
                     )}
 
                     {slide.subText && (
-                      <p className="text-white text-sm md:text-base lg:text-lg mb-4 md:mb-8 max-w-2xl mx-auto drop-shadow-md">
+                      <Editable
+                        as="p"
+                        fieldPath={`settings.slides.${slideIdx}.subText`}
+                        multiline
+                        className="text-white text-sm md:text-base lg:text-lg mb-4 md:mb-8 max-w-2xl mx-auto drop-shadow-md"
+                      >
                         {slide.subText}
-                      </p>
+                      </Editable>
                     )}
 
                     {slide.buttonText && slide.buttonLink && (
@@ -197,8 +207,28 @@ export default function Slideshow({
                         style={{
                           backgroundColor: slide.buttonColor || '#3B82F6'
                         }}
+                        // Inline-edit needs to capture clicks before the
+                        // anchor's navigation. Inside the page builder we
+                        // already short-circuit clicks on contenteditable
+                        // children, but block the anchor itself too so
+                        // editing the label doesn't kick the iframe
+                        // mid-edit.
+                        onClick={(e) => {
+                          if (
+                            (e.target as HTMLElement).closest(
+                              '[contenteditable="true"]'
+                            )
+                          ) {
+                            e.preventDefault();
+                          }
+                        }}
                       >
-                        {slide.buttonText}
+                        <Editable
+                          as="span"
+                          fieldPath={`settings.slides.${slideIdx}.buttonText`}
+                        >
+                          {slide.buttonText}
+                        </Editable>
                       </a>
                     )}
                   </div>

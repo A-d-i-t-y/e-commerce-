@@ -1,0 +1,22 @@
+"""
+A scheduled application of a changeset on the storefront. Active when
+`startTime <= NOW() < endTime` (or endTime IS NULL for indefinite). The
+overlay is applied per-request — no scheduler activates anything.
+"""
+type RolloutPlan {
+  rolloutPlanId: Int!
+  uuid: String!
+  name: String!
+  changesetId: Int!
+  startTime: DateTime!
+  endTime: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  changeset: Changeset
+}
+
+extend type Query {
+  rolloutPlan(id: Int, uuid: String): RolloutPlan
+  rolloutPlans: [RolloutPlan!]!
+  activeRolloutPlans: [RolloutPlan!]!
+}

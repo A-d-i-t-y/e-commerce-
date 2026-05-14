@@ -1,27 +1,36 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions, jsx-a11y/img-redundant-alt */
 import { FileBrowser } from '@components/admin/FileBrowser.js';
 import { InputField } from '@components/common/form/InputField.js';
+import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
 import { Button } from '@components/common/ui/Button.js';
 import React from 'react';
-import { useFormContext } from 'react-hook-form';
 
 type AlignmentType = 'left' | 'center' | 'right';
 
 interface BannerSettingProps {
-  bannerWidget: {
-    src: string;
-    alignment: AlignmentType;
-    width: number;
-    height: number;
-    alt: string;
+  // Optional: page-builder drawer mounts this without GraphQL props.
+  bannerWidget?: {
+    src?: string;
+    alignment?: AlignmentType;
+    width?: number;
+    height?: number;
+    alt?: string;
     link?: string;
   };
 }
 
 export default function BannerSetting({
-  bannerWidget: { src, alignment = 'left', width, height, alt, link }
+  bannerWidget
 }: BannerSettingProps) {
-  const { setValue, watch } = useFormContext();
+  const {
+    src = '',
+    alignment = 'left',
+    width = 0,
+    height = 0,
+    alt = '',
+    link = undefined
+  } = bannerWidget ?? {};
+  const { setValue, watch } = useScopedFormContext();
   const image = watch('settings.src', src);
   const currentAlignment = watch('settings.alignment', alignment);
   const [openFileBrowser, setOpenFileBrowser] = React.useState(false);

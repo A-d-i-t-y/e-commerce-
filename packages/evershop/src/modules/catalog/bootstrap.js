@@ -140,6 +140,7 @@ export default () => {
     type: 'collection_products',
     name: 'Collection products',
     description: 'A list of products from a collection',
+    category: 'commerce',
     settingComponent: path.resolve(
       CONSTANTS.MODULESPATH,
       'catalog/components/CollectionProductsSetting.js'
@@ -153,6 +154,25 @@ export default () => {
       count: 4,
       countPerRow: 4
     },
-    enabled: true
+    enabled: true,
+    schema: {
+      type: 'object',
+      additionalProperties: true,
+      properties: {
+        collection: { type: ['string', 'null'] },
+        count: { type: 'integer', minimum: 1, maximum: 48 },
+        countPerRow: { type: 'integer', enum: [1, 2, 3, 4, 6] }
+      }
+    },
+    graphql: {
+      typeDefs: `
+        type CollectionProductsSettings {
+          collection: ID
+          count: Int
+          countPerRow: Int
+        }
+      `,
+      settingsType: 'CollectionProductsSettings'
+    }
   });
 };

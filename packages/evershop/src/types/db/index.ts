@@ -1048,28 +1048,113 @@ export type VariantGroupUpdate = Partial<
 >;
 
 // =============================================================================
-// WIDGET
+// WIDGET (renamed in cms migration 1.3.0: widget → widget_instance)
 // =============================================================================
 
-export interface WidgetRow {
-  widget_id: number;
+export interface WidgetInstanceRow {
+  widget_instance_id: number;
   uuid: string;
   name: string;
   type: string;
-  route: Record<string, unknown>[];
-  area: Record<string, unknown>[];
-  sort_order: number;
   settings: Record<string, unknown>;
   status: boolean | null;
   created_at: Date;
   updated_at: Date;
 }
 
-export type WidgetInsert = Omit<
-  WidgetRow,
-  'widget_id' | 'uuid' | 'created_at' | 'updated_at'
+export type WidgetInstanceInsert = Omit<
+  WidgetInstanceRow,
+  'widget_instance_id' | 'uuid' | 'created_at' | 'updated_at'
 >;
-export type WidgetUpdate = Partial<Omit<WidgetRow, 'widget_id'>>;
+export type WidgetInstanceUpdate = Partial<
+  Omit<WidgetInstanceRow, 'widget_instance_id'>
+>;
+
+/**
+ * @deprecated since cms migration 1.3.0 — use `WidgetInstanceRow`. Kept as an
+ * alias so older imports keep compiling during the transition.
+ */
+export type WidgetRow = WidgetInstanceRow;
+
+export interface WidgetPlacementRow {
+  widget_placement_id: number;
+  uuid: string;
+  widget_instance_id: number;
+  route: string;
+  area: string;
+  sort_order: number;
+  // entity_urn: nullable. Set for entity-level placements (e.g. CMS page
+  // overrides). Null for route-level placements.
+  entity_urn: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export type WidgetPlacementInsert = Omit<
+  WidgetPlacementRow,
+  'widget_placement_id' | 'uuid' | 'created_at' | 'updated_at'
+>;
+export type WidgetPlacementUpdate = Partial<
+  Omit<WidgetPlacementRow, 'widget_placement_id'>
+>;
+
+// =============================================================================
+// PAGE BUILDER (introduced in pageBuilder migration 1.0.0)
+// =============================================================================
+
+export interface ChangesetRow {
+  changeset_id: number;
+  uuid: string;
+  name: string;
+  current_change: number | null;
+  token: string;
+  published_at: Date | null;
+  created_by: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export type ChangesetInsert = Omit<
+  ChangesetRow,
+  'changeset_id' | 'uuid' | 'created_at' | 'updated_at'
+>;
+export type ChangesetUpdate = Partial<Omit<ChangesetRow, 'changeset_id'>>;
+
+export interface ChangesetOperationRow {
+  changeset_operation_id: number;
+  uuid: string;
+  changeset_id: number;
+  route: string;
+  entity_urn: string;
+  // Either or both can be null; (null, set) = INSERT, (set, set) = UPDATE,
+  // (set, null) = DELETE. (null, null) is invalid and rejected at API layer.
+  old_payload: Record<string, unknown> | null;
+  new_payload: Record<string, unknown> | null;
+  change_order: number;
+  created_at: Date;
+}
+
+export type ChangesetOperationInsert = Omit<
+  ChangesetOperationRow,
+  'changeset_operation_id' | 'uuid' | 'created_at'
+>;
+
+export interface RolloutPlanRow {
+  rollout_plan_id: number;
+  uuid: string;
+  name: string;
+  changeset_id: number;
+  start_time: Date;
+  end_time: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export type RolloutPlanInsert = Omit<
+  RolloutPlanRow,
+  'rollout_plan_id' | 'uuid' | 'created_at' | 'updated_at'
+>;
+export type RolloutPlanUpdate = Partial<Omit<RolloutPlanRow, 'rollout_plan_id'>>;
 
 // =============================================================================
 // SITE (Cloud specific - may not exist in all installations)

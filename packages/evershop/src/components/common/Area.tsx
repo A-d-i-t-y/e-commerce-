@@ -1,8 +1,38 @@
 import { useAppState } from '@components/common/context/app.js';
+import { WidgetChrome } from '@components/common/page-builder/WidgetChrome.js';
 import { generateComponentKey } from '@evershop/evershop/lib/util/keyGenerator';
 import type { WidgetInstance } from '@evershop/evershop/types/widget';
 import React, { useEffect, useState } from 'react';
 import type { ElementType } from 'react';
+
+/**
+ * Subscribe to the page-builder iframe's "Globals view" toggle, surfaced as
+ * `body[data-evershop-globals-view="1"]` by `PageBuilderBridge`. Used by
+ * Area to opt into a wrapper element only when the user is actively
+ * inspecting global areas — so production storefront (and iframe-with-
+ * Globals-OFF) keeps the same DOM shape as today.
+ *
+ * Returns `false` outside the iframe (production storefront): the bridge
+ * never sets the body attribute, MutationObserver never fires, state stays
+ * at the initial `false`.
+ */
+function useGlobalsViewActive(): boolean {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const sync = () => {
+      setActive(document.body?.dataset?.evershopGlobalsView === '1');
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['data-evershop-globals-view']
+    });
+    return () => observer.disconnect();
+  }, []);
+  return active;
+}
 
 interface Component {
   id?: string;
@@ -10,6 +40,16 @@ interface Component {
   props?: Record<string, any>;
   component: {
     default: React.ElementType | React.ReactNode;
+  };
+  /**
+   * Page builder metadata. Set when this entry is a widget instance — used
+   * by the iframe chrome to identify the widget for selection / delete /
+   * inline-edit. Undefined for regular layout components.
+   */
+  _widgetMeta?: {
+    uuid: string;
+    type: string;
+    settings: Record<string, unknown>;
   };
 }
 
@@ -30,6 +70,19 @@ interface AreaProps {
   wrapper?: React.ReactNode | string;
   wrapperProps?: Record<string, any>;
   components?: Components;
+  /**
+   * True for areas that appear on every page (e.g. header, footer).
+   * Informational only — used by the page-builder admin to surface
+   * "this area appears on every page" warnings when editing.
+   */
+  isGlobal?: boolean;
+  /**
+   * Opt this area into page-builder editing. When false (the default),
+   * the page builder UI does not expose this area as a drop target,
+   * even if it is rendered in the SSR'd preview. Protects layout-only
+   * or system-message areas from accidental edits.
+   */
+  editableInPageBuilder?: boolean;
   [key: string]: unknown;
 }
 
@@ -166,7 +219,9 @@ function Area(props: AreaProps) {
     noOuter,
     wrapper,
     className,
-    components
+    components,
+    isGlobal,
+    editableInPageBuilder
   } = props;
 
   const areaComponents = (() => {
@@ -184,7 +239,20 @@ function Area(props: AreaProps) {
           id: widget.id,
           sortOrder: widget.sortOrder,
           props: widget.props,
-          component: w.component
+          component: w.component,
+          // Tag with widget metadata so the page-builder chrome can wrap
+          // this entry. `uuid` and `settings` are populated by the global
+          // response middleware (`base/pages/global/response[errorHandler]`)
+          // for page-builder iframe loads.
+          _widgetMeta: widget.uuid
+            ? {
+                uuid: widget.uuid,
+                type: widget.type,
+                settings:
+                  ((widget as unknown) as { settings?: Record<string, unknown> })
+                    .settings ?? {}
+              }
+            : undefined
         });
       }
     });
@@ -199,11 +267,22 @@ function Area(props: AreaProps) {
     );
   })();
   const { propsMap } = context;
-  // In debug mode, always use a real wrapper element so borders/badges can render.
-  // noOuter is intentionally ignored when debug is active.
-  // The process.env.NODE_ENV guard lets Terser statically eliminate this in production.
+
+  // Forces a real wrapper in two situations where the data-evershop-* attrs
+  // need to land somewhere:
+  //   1. Development debug mode — outline + label rendering needs a real
+  //      element. `process.env.NODE_ENV` lets Terser drop this in prod.
+  //   2. Page-builder iframe with the Globals overlay toggled on, AND this
+  //      Area is marked `isGlobal`. The user opted into "show me the
+  //      globals" — the violet outline can only attach to a real element.
+  //      When the toggle is off (default), `noOuter` is honored as-is so
+  //      the iframe layout matches the production storefront exactly.
+  const globalsViewActive = useGlobalsViewActive();
   const effectiveNoOuter =
-    process.env.NODE_ENV === 'development' && debug ? false : noOuter;
+    (process.env.NODE_ENV === 'development' && debug) ||
+    (globalsViewActive && isGlobal === true)
+      ? false
+      : noOuter;
 
   let WrapperComponent: ElementType = React.Fragment;
   if (effectiveNoOuter !== true) {
@@ -221,6 +300,18 @@ function Area(props: AreaProps) {
     areaWrapperProps = { className: className || '', ...wrapperProps };
   } else {
     areaWrapperProps = { className: className || '' };
+  }
+  // Page-builder hooks: tag global / editable areas with data attributes
+  // so the iframe's "Globals" overlay (toggled from the editor topbar)
+  // can outline them via CSS without needing per-area JS.
+  if (effectiveNoOuter !== true) {
+    if (isGlobal) {
+      areaWrapperProps['data-evershop-global'] = 'true';
+    }
+    if (editableInPageBuilder) {
+      areaWrapperProps['data-evershop-editable-area'] = 'true';
+    }
+    areaWrapperProps['data-evershop-area-id'] = id;
   }
 
   const color =
@@ -275,6 +366,25 @@ function Area(props: AreaProps) {
       rendered = <C key={index} {...componentProps} />;
     } else if (typeof C === 'function') {
       rendered = <C key={index} areaProps={props} {...componentProps} />;
+    }
+
+    // Wrap widget entries with the page-builder chrome. `WidgetChrome`
+    // returns its children unchanged outside the iframe, so this is safe
+    // for production storefront. Pass `area` (the Area id rendering this
+    // widget) so the toolbar can identify the correct placement when the
+    // widget has placements in multiple areas.
+    if (rendered !== null && w._widgetMeta) {
+      rendered = (
+        <WidgetChrome
+          key={index}
+          uuid={w._widgetMeta.uuid}
+          type={w._widgetMeta.type}
+          area={id}
+          settings={w._widgetMeta.settings}
+        >
+          {rendered}
+        </WidgetChrome>
+      );
     }
 
     if (!debug || rendered === null || process.env.NODE_ENV !== 'development') {

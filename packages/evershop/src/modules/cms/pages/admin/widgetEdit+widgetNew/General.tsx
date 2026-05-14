@@ -100,7 +100,7 @@ interface GeneralProps {
     label: string;
     isApi: boolean;
     isAdmin: boolean;
-    method: string[];
+    methods: string[];
   }>;
 }
 
@@ -112,7 +112,7 @@ export default function General({ widget, routes }: GeneralProps) {
       label: 'All',
       isAdmin: false,
       isApi: false,
-      method: ['GET']
+      methods: ['GET']
     },
     ...routes
   ];
@@ -192,8 +192,8 @@ export default function General({ widget, routes }: GeneralProps) {
                   (r) =>
                     r.isApi === false &&
                     r.isAdmin === false &&
-                    r.method.includes('GET') &&
-                    r.method.length === 1
+                    r.methods.includes('GET') &&
+                    r.methods.length === 1
                 )}
                 hideSelectedOptions
                 isMulti
@@ -251,7 +251,7 @@ export const query = `
       label: name
       isApi
       isAdmin
-      method
+      methods
     }
   }
 `;

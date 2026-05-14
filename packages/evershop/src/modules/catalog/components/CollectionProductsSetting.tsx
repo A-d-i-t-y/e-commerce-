@@ -1,6 +1,7 @@
 import Spinner from '@components/admin/Spinner.js';
 import { InputField } from '@components/common/form/InputField.js';
 import { NumberField } from '@components/common/form/NumberField.js';
+import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
 import { Input } from '@components/common/ui/Input.js';
 import { Item, ItemContent } from '@components/common/ui/Item.js';
 import { Label } from '@components/common/ui/Label.js';
@@ -9,7 +10,6 @@ import {
   RadioGroupItem
 } from '@components/common/ui/RadioGroup.js';
 import React from 'react';
-import { useFormContext } from 'react-hook-form';
 import { useQuery } from 'urql';
 
 const SearchQuery = `
@@ -27,21 +27,37 @@ const SearchQuery = `
 `;
 
 interface CollectionProductsSettingProps {
-  collectionProductsWidget: {
-    collection: string;
-    count: number;
+  // Optional: page-builder drawer mounts this without GraphQL props.
+  collectionProductsWidget?: {
+    collection?: string;
+    count?: number;
     countPerRow?: number;
   };
 }
 function CollectionProductsSetting({
-  collectionProductsWidget: { collection, count, countPerRow }
+  collectionProductsWidget
 }: CollectionProductsSettingProps) {
+  const {
+    collection = '',
+    count = 0,
+    countPerRow = undefined
+  } = collectionProductsWidget ?? {};
   const limit = 10;
   const [inputValue, setInputValue] = React.useState<string | null>(null);
-  const [selectedCollection, setSelectedCollection] =
-    React.useState(collection);
   const [page, setPage] = React.useState(1);
-  const { register, setValue } = useFormContext();
+  const { setValue, watch } = useScopedFormContext();
+  // Authoritative value for the radio comes from the page-builder form so
+  // a re-mount (or saved-state recovery) reflects whatever was last picked,
+  // not just the server-rendered default. Outside the page-builder scope
+  // (standalone widgetEdit page) the watch path falls through unchanged
+  // and behaves the same as before.
+  const watchedCollection = watch('settings.collection') as
+    | string
+    | undefined;
+  const selectedCollection =
+    typeof watchedCollection === 'string' && watchedCollection.length > 0
+      ? watchedCollection
+      : collection;
   const [result, reexecuteQuery] = useQuery({
     query: SearchQuery,
     variables: {
@@ -120,11 +136,11 @@ function CollectionProductsSetting({
               </div>
             )}
             <RadioGroup
-              defaultValue={selectedCollection}
+              value={selectedCollection}
               onValueChange={(value) => {
-                setSelectedCollection(value as string);
-                setValue('settings[collection]', value, {
-                  shouldDirty: true
+                setValue('settings.collection', value, {
+                  shouldDirty: true,
+                  shouldTouch: true
                 });
               }}
             >
