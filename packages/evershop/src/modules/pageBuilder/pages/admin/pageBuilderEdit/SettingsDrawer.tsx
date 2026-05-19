@@ -278,6 +278,28 @@ export function SettingsDrawer({
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.preventDefault();
       dragStateRef.current = { startX: e.clientX, startWidth: width };
+
+      // The iframe to the left of the drawer is a separate document; once
+      // the cursor crosses into it, the parent window stops receiving
+      // mousemove (the iframe captures them) and the drag thread dies.
+      // That's why making the drawer BIGGER (dragging leftward, into the
+      // iframe) lost focus while making it smaller worked fine. Disable
+      // pointer events on the iframes for the duration of the drag and
+      // restore them on mouseup. We also disable text selection on the
+      // body so the cursor doesn't flicker between col-resize and the
+      // text I-beam as it travels across the page.
+      const iframes = Array.from(
+        document.querySelectorAll<HTMLIFrameElement>('iframe')
+      );
+      const previousPointerEvents = iframes.map((f) => f.style.pointerEvents);
+      iframes.forEach((f) => {
+        f.style.pointerEvents = 'none';
+      });
+      const previousBodyUserSelect = document.body.style.userSelect;
+      const previousBodyCursor = document.body.style.cursor;
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+
       const onMove = (ev: MouseEvent) => {
         const state = dragStateRef.current;
         if (!state) return;
@@ -291,13 +313,12 @@ export function SettingsDrawer({
         setWidth(next);
       };
       const onUp = () => {
-        const state = dragStateRef.current;
-        if (state) {
-          // Snapshot the latest width via the closure into a fresh read.
-          // setWidth's functional form is unnecessary because onMove already
-          // wrote the latest value via setWidth(next).
-        }
         dragStateRef.current = null;
+        iframes.forEach((f, i) => {
+          f.style.pointerEvents = previousPointerEvents[i] ?? '';
+        });
+        document.body.style.userSelect = previousBodyUserSelect;
+        document.body.style.cursor = previousBodyCursor;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
       };

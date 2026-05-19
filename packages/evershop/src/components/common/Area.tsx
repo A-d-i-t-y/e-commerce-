@@ -1,4 +1,6 @@
 import { useAppState } from '@components/common/context/app.js';
+import { AreaStartDropZone } from '@components/common/page-builder/AreaStartDropZone.js';
+import { useIsInPageBuilderIframe } from '@components/common/page-builder/pageBuilderMode.js';
 import { WidgetChrome } from '@components/common/page-builder/WidgetChrome.js';
 import { generateComponentKey } from '@evershop/evershop/lib/util/keyGenerator';
 import type { WidgetInstance } from '@evershop/evershop/types/widget';
@@ -212,6 +214,10 @@ function areaColor(id: string | undefined): string {
 function Area(props: AreaProps) {
   const context = useAppState();
   const debug = useDebugMode();
+  // True only inside the page-builder iframe (false on SSR + production
+  // storefront). Used to gate the per-renderable sort_order wrapper so
+  // production DOM is byte-for-byte identical to today.
+  const inPageBuilder = useIsInPageBuilderIframe();
   const {
     id,
     coreComponents,
@@ -372,7 +378,9 @@ function Area(props: AreaProps) {
     // returns its children unchanged outside the iframe, so this is safe
     // for production storefront. Pass `area` (the Area id rendering this
     // widget) so the toolbar can identify the correct placement when the
-    // widget has placements in multiple areas.
+    // widget has placements in multiple areas. `sortOrder` powers the
+    // `data-evershop-pb-sort-order` attribute that drop-zone DOM walks
+    // read at drop time (`computeDropSortOrder`).
     if (rendered !== null && w._widgetMeta) {
       rendered = (
         <WidgetChrome
@@ -380,10 +388,28 @@ function Area(props: AreaProps) {
           uuid={w._widgetMeta.uuid}
           type={w._widgetMeta.type}
           area={id}
+          editableInPageBuilder={editableInPageBuilder === true}
+          sortOrder={Number(w.sortOrder ?? 0)}
           settings={w._widgetMeta.settings}
         >
           {rendered}
         </WidgetChrome>
+      );
+    } else if (rendered !== null && inPageBuilder) {
+      // Non-widget renderables (layout components like ShoppingCart, plus
+      // any `coreComponents`) get a tagged wrapper too — drop zones need
+      // to be able to see them in sibling walks. `display: contents`
+      // keeps the wrapper layout-transparent so flexbox/grid/tables don't
+      // get a phantom child interfering. Only emitted in iframe mode;
+      // production DOM is unaffected.
+      rendered = (
+        <div
+          key={index}
+          data-evershop-pb-sort-order={Number(w.sortOrder ?? 0)}
+          style={{ display: 'contents' }}
+        >
+          {rendered}
+        </div>
       );
     }
 
@@ -425,6 +451,15 @@ function Area(props: AreaProps) {
     );
   });
 
+  // Drop zone above everything in the area, only emitted for areas the page
+  // builder is allowed to edit. The component returns null outside the
+  // iframe so production storefront DOM is unchanged. The zone computes its
+  // own `sortOrder` at drop time by walking sibling DOM elements that carry
+  // `data-evershop-pb-sort-order` — no prop threading needed.
+  const startDropZone = editableInPageBuilder ? (
+    <AreaStartDropZone areaId={id} />
+  ) : null;
+
   if (process.env.NODE_ENV === 'development' && debug) {
     return (
       <WrapperComponent {...areaWrapperProps}>
@@ -449,6 +484,7 @@ function Area(props: AreaProps) {
         >
           #{id}
         </span>
+        {startDropZone}
         {renderedChildren}
       </WrapperComponent>
     );
@@ -456,6 +492,7 @@ function Area(props: AreaProps) {
 
   return (
     <WrapperComponent {...areaWrapperProps}>
+      {startDropZone}
       {renderedChildren}
     </WrapperComponent>
   );

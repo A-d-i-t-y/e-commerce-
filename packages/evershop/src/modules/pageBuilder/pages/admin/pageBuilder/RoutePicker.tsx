@@ -28,8 +28,7 @@ export default function RoutePicker({ routes, editUrlBase }: RoutePickerProps) {
       r.editableInPageBuilder === true &&
       !r.isApi &&
       !r.isAdmin &&
-      typeof r.path === 'string' &&
-      !r.path.includes(':')
+      typeof r.path === 'string'
   );
 
   return (

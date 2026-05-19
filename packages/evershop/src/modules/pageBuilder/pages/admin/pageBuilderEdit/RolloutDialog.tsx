@@ -41,6 +41,18 @@ interface RolloutDialogProps {
    * sees the same verdict before submission.
    */
   existingPlans?: ReadonlyArray<ExistingRolloutPlan>;
+  /**
+   * When set, the dialog opens in **edit mode**: title/submit copy change,
+   * fields pre-fill from this plan's values, and the overlap check skips
+   * the plan being edited (so re-saving the same window doesn't conflict
+   * with itself).
+   */
+  editingPlan?: {
+    rolloutPlanId: number;
+    name: string;
+    startTime: string;
+    endTime: string | null;
+  } | null;
 }
 
 interface FieldErrors {
@@ -137,13 +149,30 @@ function validate(
   return errors;
 }
 
+/**
+ * Convert an ISO timestamp to the value `<input type="datetime-local">`
+ * expects (`yyyy-MM-ddTHH:mm` in the user's local timezone). Pre-fill needs
+ * this because the GraphQL DateTime resolver returns ISO with offset; the
+ * native input can't read that directly.
+ */
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
+}
+
 export function RolloutDialog({
   open,
   onClose,
   onSubmit,
   isBusy,
-  existingPlans = []
+  existingPlans = [],
+  editingPlan = null
 }: RolloutDialogProps): React.ReactElement {
+  const isEditMode = editingPlan != null;
   const [name, setName] = useState('');
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
@@ -157,19 +186,39 @@ export function RolloutDialog({
   }>({ name: false, startTime: false, endTime: false });
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  // Reset when re-opening so the dialog always starts clean.
+  // Reset / pre-fill on every open. In create mode the form is blank; in
+  // edit mode the fields seed from the plan being edited so the user is
+  // tweaking real values, not retyping from scratch.
   useEffect(() => {
     if (!open) return;
-    setName('');
-    setStartAt('');
-    setEndAt('');
+    if (editingPlan) {
+      setName(editingPlan.name);
+      setStartAt(isoToLocalInput(editingPlan.startTime));
+      setEndAt(editingPlan.endTime ? isoToLocalInput(editingPlan.endTime) : '');
+    } else {
+      setName('');
+      setStartAt('');
+      setEndAt('');
+    }
     setTouched({ name: false, startTime: false, endTime: false });
     setSubmitAttempted(false);
-  }, [open]);
+  }, [open, editingPlan]);
+
+  // Edit mode excludes self from the overlap check — re-saving the same
+  // window shouldn't conflict with itself.
+  const overlapPlans = useMemo(
+    () =>
+      editingPlan
+        ? existingPlans.filter(
+            (p) => p.rolloutPlanId !== editingPlan.rolloutPlanId
+          )
+        : existingPlans,
+    [existingPlans, editingPlan]
+  );
 
   const errors = useMemo(
-    () => validate(name, startAt, endAt, existingPlans),
-    [name, startAt, endAt, existingPlans]
+    () => validate(name, startAt, endAt, overlapPlans),
+    [name, startAt, endAt, overlapPlans]
   );
   const isValid = Object.keys(errors).length === 0;
 
@@ -192,7 +241,9 @@ export function RolloutDialog({
     setSubmitAttempted(true);
     if (!isValid) return; // Defensive — button should be disabled in this case.
     const startMs = new Date(startAt).getTime();
-    const endIso = endAt ? new Date(new Date(endAt).getTime()).toISOString() : null;
+    const endIso = endAt
+      ? new Date(new Date(endAt).getTime()).toISOString()
+      : null;
     onSubmit({
       name: name.trim(),
       startTime: new Date(startMs).toISOString(),
@@ -204,16 +255,19 @@ export function RolloutDialog({
     <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : null)}>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>Save as rollout plan</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? 'Edit rollout schedule' : 'Save as rollout plan'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="rounded-md bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground leading-relaxed">
-          A rollout plan saves your current edits as a snapshot and applies
-          them automatically during a scheduled window.
+          {isEditMode
+            ? 'Update the name and active window for this rollout plan. Content edits are managed separately in the editor.'
+            : 'A rollout plan saves your current edits as a snapshot and applies them automatically during a scheduled window.'}
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-[11px] font-semibold text-foreground/80 tracking-wide">
+          <label className="block text-xs font-semibold text-foreground/80 tracking-wide">
             Name
           </label>
           <input
@@ -239,7 +293,7 @@ export function RolloutDialog({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold text-foreground/80 tracking-wide">
+            <label className="block text-xs font-semibold text-foreground/80 tracking-wide">
               Start
             </label>
             <input
@@ -261,7 +315,7 @@ export function RolloutDialog({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold text-foreground/80 tracking-wide">
+            <label className="block text-xs font-semibold text-foreground/80 tracking-wide">
               End{' '}
               <span className="font-normal text-muted-foreground">
                 (optional)
@@ -299,7 +353,7 @@ export function RolloutDialog({
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {willBeDraft ? (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted/50 text-muted-foreground">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-muted/50 text-muted-foreground">
               Pending start time
             </span>
           ) : (
@@ -321,12 +375,16 @@ export function RolloutDialog({
         </div>
 
         <DialogFooter>
-          <ButtonGroup>
+          <ButtonGroup className="gap-2">
             <Button variant="ghost" onClick={onClose} disabled={isBusy}>
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={isBusy || !isValid}>
-              {isBusy ? 'Saving…' : 'Create rollout plan'}
+              {isBusy
+                ? 'Saving…'
+                : isEditMode
+                ? 'Save changes'
+                : 'Create rollout plan'}
             </Button>
           </ButtonGroup>
         </DialogFooter>

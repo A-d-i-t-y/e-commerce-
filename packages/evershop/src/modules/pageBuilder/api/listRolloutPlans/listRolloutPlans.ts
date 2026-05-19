@@ -35,7 +35,7 @@ const VALID_STATUSES: Status[] = ['active', 'upcoming', 'past', 'all'];
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const rawStatus = (request.query.status as string | undefined) ?? 'all';

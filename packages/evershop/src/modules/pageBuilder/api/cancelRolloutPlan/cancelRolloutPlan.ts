@@ -27,7 +27,7 @@ import { EvershopResponse } from '../../../../types/response.js';
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const planId = Number(request.params.id);

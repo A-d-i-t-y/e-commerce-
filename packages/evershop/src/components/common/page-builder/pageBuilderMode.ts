@@ -58,3 +58,23 @@ export function postToParent(message: unknown): void {
   if (typeof window === 'undefined' || window.parent === window) return;
   window.parent.postMessage(message, window.location.origin);
 }
+
+/**
+ * SSR-safe React hook returning `true` once the component has mounted in
+ * the page-builder iframe. First render always returns `false` so the SSR
+ * output matches the production storefront byte-for-byte; the post-mount
+ * effect flips it to `true` when applicable.
+ *
+ * Pulled into its own hook so Area, WidgetChrome, and AreaStartDropZone all
+ * share the same detection logic without re-implementing the
+ * useState/useEffect pattern in each place.
+ */
+import { useEffect, useState } from 'react';
+
+export function useIsInPageBuilderIframe(): boolean {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    if (isInPageBuilderIframe()) setActive(true);
+  }, []);
+  return active;
+}

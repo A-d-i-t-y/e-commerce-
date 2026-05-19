@@ -49,7 +49,11 @@ export default async (connection: PoolClient): Promise<void> => {
       widget_instance_id INT NOT NULL REFERENCES widget_instance(widget_instance_id) ON DELETE CASCADE,
       route VARCHAR(255) NOT NULL,
       area VARCHAR(255) NOT NULL,
-      sort_order INT NOT NULL DEFAULT 1,
+      -- REAL (float) instead of INT so we can insert between two adjacent
+      -- widgets via midpoint arithmetic ((A + B) / 2) without reshuffling
+      -- everything around them. The page-builder palette and reorder paths
+      -- both rely on this.
+      sort_order REAL NOT NULL DEFAULT 1,
       entity_urn VARCHAR(255),
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -1106,7 +1106,6 @@ export interface ChangesetRow {
   changeset_id: number;
   uuid: string;
   name: string;
-  current_change: number | null;
   token: string;
   published_at: Date | null;
   created_by: number;
@@ -1144,6 +1143,10 @@ export interface RolloutPlanRow {
   uuid: string;
   name: string;
   changeset_id: number;
+  // Snapshot of changeset.route_cursors at Save time. Storefront overlay reads
+  // this (not the live changeset cursors) so that in-progress edits in the
+  // editor don't leak to the live storefront until the user explicitly Saves.
+  route_cursors: Record<string, number>;
   start_time: Date;
   end_time: Date | null;
   created_at: Date;

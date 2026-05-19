@@ -77,6 +77,36 @@ const buildWidgetComponentsPerRoute = (route, widgets, imports) => {
         default: `---${id}---`
       }
     };
+
+    // Admin bundles also ship each widget's previewComponent under a
+    // separate wildcard-area key (`admin_widget_preview_<type>`). The
+    // page-builder Widgets-palette hover card (`WidgetPreviewCard`) looks
+    // it up directly from `Area.defaultProps.components[route]['*']`. We
+    // don't route this through `<Area>` because Area picks exactly one
+    // component per widget type — and we need two for admin (settings +
+    // preview).
+    if (route.isAdmin && widget.previewComponent) {
+      const previewUrl = pathToFileURL(widget.previewComponent).toString();
+      const previewId = generateComponentKey(
+        `admin_widget_preview_${widget.type}`
+      );
+      const previewExists = Array.from(imports.keys()).find(
+        (key) => key.url === previewUrl
+      );
+      if (!previewExists) {
+        imports.set(
+          { id: previewId, url: previewUrl },
+          `import ${previewId} from '${previewUrl}';`
+        );
+      }
+      components[previewId] = {
+        id: previewId,
+        sortOrder: 0,
+        component: {
+          default: `---${previewId}---`
+        }
+      };
+    }
   });
   return components;
 };

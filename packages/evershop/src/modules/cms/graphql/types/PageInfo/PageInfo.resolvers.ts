@@ -39,15 +39,16 @@ export default {
   },
   PageInfo: {
     breadcrumbs: async (root, args, context) => {
+      // Strip query string first — in page-builder preview the URL carries
+      // `?changeset=…&ajax=true`, so `originalUrl === '/'` would never match
+      // and the homepage would render a breadcrumb that production doesn't.
+      const urlPath = (context.originalUrl ?? '').split('?')[0];
       // Check if the current page is home page
-      if (context.originalUrl === '/') {
+      if (urlPath === '/' || urlPath === '') {
         return [];
       }
       // Get the current path
-      const path = context.originalUrl
-        .split('?')[0]
-        .replace(/^\/|\/$/g, '')
-        .replace(/\./g, '');
+      const path = urlPath.replace(/^\/|\/$/g, '').replace(/\./g, '');
 
       // Check if the path is existed in the url_rewrite table
       const rewriteRule = await select()

@@ -192,6 +192,7 @@ export default {
         name: row.name,
         description: row.description,
         category: row.category ?? null,
+        icon: row.icon ?? null,
         settingComponent: row.settingComponent,
         component: row.component,
         // Field name matches the schema's `defaultSetting` (singular). The
@@ -212,6 +213,7 @@ export default {
             name: type.name,
             description: type.description,
             category: type.category ?? null,
+            icon: type.icon ?? null,
             settingComponent: type.settingComponent,
             component: type.component,
             defaultSetting: type.defaultSettings,
@@ -219,10 +221,53 @@ export default {
           }
         : null;
     },
-    columnsWidget(_, { columnCount, gap }) {
+    columnsWidget(
+      _,
+      { columnCount, gap, ratio, background, padding, contentPosition }
+    ) {
+      // `ratio` (e.g. "1-2-1") is the new authoritative descriptor. When
+      // absent on a pre-existing widget, derive an even split from the
+      // legacy `columnCount` so old data keeps rendering.
+      const rawRatio = typeof ratio === 'string' && ratio.length > 0
+        ? ratio
+        : null;
+      const parts = rawRatio
+        ? rawRatio
+            .split('-')
+            .map((p) => Math.max(1, Math.min(6, Number(p) || 1)))
+        : [];
+      const effectiveCount = parts.length
+        ? parts.length
+        : Math.max(1, Math.min(4, Number(columnCount) || 2));
+      const effectiveRatio = parts.length
+        ? parts.join('-')
+        : Array.from({ length: effectiveCount }, () => '1').join('-');
+      const allowedAnchors = [
+        'tl',
+        'tc',
+        'tr',
+        'ml',
+        'mc',
+        'mr',
+        'bl',
+        'bc',
+        'br'
+      ];
       return {
-        columnCount: Math.max(1, Math.min(4, Number(columnCount) || 2)),
-        gap: Math.max(0, Math.min(80, Number(gap) ?? 16))
+        // Inputs widened to Float so a slider mid-drag (e.g. 200.5) doesn't
+        // crash GraphQL validation; outputs round to a clean integer.
+        columnCount: Math.round(effectiveCount),
+        gap: Math.round(Math.max(0, Math.min(80, Number(gap) ?? 16))),
+        ratio: effectiveRatio,
+        background:
+          typeof background === 'string' && background.length > 0
+            ? background
+            : null,
+        padding:
+          typeof padding === 'string' && padding.length > 0 ? padding : 'none',
+        contentPosition: allowedAnchors.includes(contentPosition)
+          ? contentPosition
+          : 'mc'
       };
     },
     textWidget(_, { text, className }) {
@@ -280,22 +325,358 @@ export default {
         autoplaySpeed,
         arrows,
         dots,
-        fullWidth,
-        widthValue,
-        heightValue,
-        heightType
+        transition,
+        transitionSpeed,
+        pauseOnHover,
+        pauseOnInteraction,
+        arrowsStyle,
+        dotsStyle,
+        aspectRatio,
+        defaultContentPosition,
+        defaultOverlayTint,
+        defaultOverlayOpacity
       }
     ) {
+      // Defaults are picked so a slideshow created before these fields
+      // existed renders the same as before:
+      //   - transition slide, 500ms, pauseOnHover true, no pauseOnInteraction
+      //   - arrowsStyle / dotsStyle derived from the legacy arrows / dots
+      //     booleans when the new style fields are absent
+      //   - aspectRatio "auto" mirrors slick's adaptiveHeight behavior
+      //   - default content position "mc" mirrors the old centered overlay
+      //   - default overlay is none — the prior render relied on
+      //     text-shadow only.
       return {
-        slides: slides || [],
-        autoplay: autoplay !== undefined ? autoplay : true,
-        autoplaySpeed: autoplaySpeed || 3000,
-        arrows: arrows !== undefined ? arrows : true,
-        dots: dots !== undefined ? dots : true,
-        fullWidth: fullWidth !== undefined ? fullWidth : true,
-        widthValue: widthValue || 1920,
-        heightValue: heightValue || 800,
-        heightType: heightType || 'auto'
+        slides: Array.isArray(slides) ? slides : [],
+        autoplay: autoplay !== undefined ? Boolean(autoplay) : true,
+        autoplaySpeed: Number.isFinite(Number(autoplaySpeed))
+          ? Number(autoplaySpeed)
+          : 3000,
+        arrows: arrows !== undefined ? Boolean(arrows) : true,
+        dots: dots !== undefined ? Boolean(dots) : true,
+        transition: transition || 'slide',
+        transitionSpeed: Number.isFinite(Number(transitionSpeed))
+          ? Math.min(1500, Math.max(200, Number(transitionSpeed)))
+          : 500,
+        pauseOnHover:
+          pauseOnHover !== undefined ? Boolean(pauseOnHover) : true,
+        pauseOnInteraction: Boolean(pauseOnInteraction),
+        arrowsStyle:
+          arrowsStyle ?? (arrows === false ? 'hidden' : 'bottom-right'),
+        dotsStyle: dotsStyle ?? (dots === false ? 'hidden' : 'dots'),
+        aspectRatio: aspectRatio || 'auto',
+        defaultContentPosition: defaultContentPosition || 'mc',
+        defaultOverlayTint: defaultOverlayTint || 'none',
+        defaultOverlayOpacity: Number.isFinite(Number(defaultOverlayOpacity))
+          ? Math.min(1, Math.max(0, Number(defaultOverlayOpacity)))
+          : 0.3
+      };
+    },
+    brandStoryWidget(
+      _,
+      {
+        layout,
+        image,
+        imageAlt,
+        imageWidth,
+        imageHeight,
+        eyebrow,
+        heading,
+        body,
+        bodySecondary,
+        link,
+        pullQuote,
+        imageSize
+      }
+    ) {
+      const allowedLayouts = [
+        'image-left',
+        'image-right',
+        'centered',
+        'pull-quote'
+      ];
+      const allowedSizes = [40, 50, 60];
+      const sizeNum = Math.round(Number(imageSize));
+      const w = Number(imageWidth);
+      const h = Number(imageHeight);
+      return {
+        layout: allowedLayouts.includes(layout) ? layout : 'image-left',
+        image: image || null,
+        imageAlt: imageAlt || '',
+        imageWidth: Number.isFinite(w) && w > 0 ? Math.round(w) : null,
+        imageHeight: Number.isFinite(h) && h > 0 ? Math.round(h) : null,
+        eyebrow: eyebrow || null,
+        heading: heading || '',
+        body: body || '',
+        bodySecondary: bodySecondary || null,
+        link: link && typeof link === 'object' ? link : null,
+        pullQuote: pullQuote || null,
+        imageSize: allowedSizes.includes(sizeNum) ? sizeNum : 50
+      };
+    },
+    categoryMosaicWidget(
+      _,
+      { heading, tiles, columns, aspect, layout, labelPosition }
+    ) {
+      const safeTiles = (Array.isArray(tiles) ? tiles : []).filter(
+        (t) => t && typeof t === 'object' && t.image && t.label
+      );
+      const colsNum = Number(columns);
+      return {
+        heading: heading || null,
+        tiles: safeTiles,
+        columns:
+          Number.isFinite(colsNum) && colsNum >= 2 && colsNum <= 6
+            ? Math.round(colsNum)
+            : null,
+        aspect: ['square', 'portrait', 'landscape'].includes(aspect)
+          ? aspect
+          : 'square',
+        layout: layout === 'asymmetric' ? 'asymmetric' : 'uniform',
+        labelPosition: labelPosition === 'below' ? 'below' : 'overlay'
+      };
+    },
+    tieredCategoriesWidget(
+      _,
+      { groups, columns, imageAspect, showParentLink }
+    ) {
+      const safeGroups = (Array.isArray(groups) ? groups : []).filter(
+        (g) => g && typeof g === 'object' && g.parent?.label
+      );
+      const colsNum = Number(columns);
+      return {
+        groups: safeGroups,
+        columns:
+          Number.isFinite(colsNum) && colsNum >= 2 && colsNum <= 4
+            ? Math.round(colsNum)
+            : null,
+        imageAspect: ['square', 'portrait', 'landscape'].includes(imageAspect)
+          ? imageAspect
+          : 'landscape',
+        showParentLink:
+          showParentLink !== undefined ? Boolean(showParentLink) : true
+      };
+    },
+    bentoGridWidget(_, { tiles, gap, minHeight }) {
+      const safeTiles = (Array.isArray(tiles) ? tiles : [])
+        .filter(
+          (t) =>
+            t && typeof t === 'object' && t.heading && t.link && t.link.url
+        )
+        .slice(0, 5);
+      const minH = Number(minHeight);
+      return {
+        tiles: safeTiles,
+        gap: ['sm', 'md', 'lg'].includes(gap) ? gap : 'md',
+        // Math.round guards the output side — input was widened to Float so
+        // a slider mid-drag (e.g. 360.5) doesn't crash GraphQL validation,
+        // but the response is still typed Int so the rendered widget
+        // receives a clean integer.
+        minHeight: Number.isFinite(minH)
+          ? Math.round(Math.min(640, Math.max(240, minH)))
+          : 360
+      };
+    },
+    splitFeatureWidget(
+      _,
+      {
+        image,
+        imageAlt,
+        imagePosition,
+        width,
+        height,
+        eyebrow,
+        heading,
+        body,
+        cta,
+        verticalAlign,
+        imageFit,
+        minHeight
+      }
+    ) {
+      const allowedPosition = imagePosition === 'right' ? 'right' : 'left';
+      const allowedAlign = ['top', 'center', 'bottom'].includes(verticalAlign)
+        ? verticalAlign
+        : 'center';
+      const allowedFit = imageFit === 'contain' ? 'contain' : 'cover';
+      const minH = Number(minHeight);
+      const w = Number(width);
+      const h = Number(height);
+      return {
+        image: image || '',
+        imageAlt: imageAlt || '',
+        imagePosition: allowedPosition,
+        // Natural intrinsic dimensions of the picked image. Null for widgets
+        // saved before dimension capture; storefront falls back to a hero
+        // default.
+        width: Number.isFinite(w) && w > 0 ? Math.round(w) : null,
+        height: Number.isFinite(h) && h > 0 ? Math.round(h) : null,
+        eyebrow: eyebrow || null,
+        heading: heading || '',
+        body: body || null,
+        cta: cta && typeof cta === 'object' ? cta : null,
+        verticalAlign: allowedAlign,
+        imageFit: allowedFit,
+        minHeight: Number.isFinite(minH)
+          ? Math.round(Math.min(800, Math.max(200, minH)))
+          : 480
+      };
+    },
+    announcementBarWidget(
+      _,
+      { backgroundColor, textColor, delay, announcements }
+    ) {
+      const safeAnnouncements = (Array.isArray(announcements)
+        ? announcements
+        : []
+      )
+        .filter((a) => a && typeof a === 'object' && a.content)
+        .map((a) => ({
+          id: a.id,
+          content: String(a.content),
+          link:
+            a.link && a.link.url
+              ? {
+                  url: a.link.url,
+                  label: a.link.label || a.content,
+                  newTab: !!a.link.newTab
+                }
+              : null
+        }));
+      const d = Number(delay);
+      return {
+        backgroundColor:
+          typeof backgroundColor === 'string' && backgroundColor.length > 0
+            ? backgroundColor
+            : '#000000',
+        textColor:
+          typeof textColor === 'string' && textColor.length > 0
+            ? textColor
+            : '#ffffff',
+        delay: Number.isFinite(d) ? Math.round(Math.max(1000, d)) : 4000,
+        announcements: safeAnnouncements
+      };
+    },
+    couponBlockWidget(
+      _,
+      {
+        eyebrow,
+        heading,
+        body,
+        code,
+        ctaLabel,
+        ctaLink,
+        ctaNewTab,
+        expires,
+        borderStyle,
+        backgroundColor
+      }
+    ) {
+      const allowedBorders = ['solid', 'dashed', 'none'];
+      // Loosely-validate expires: it must parse to a date. Anything else is
+      // dropped to null so the storefront script can branch cleanly.
+      let safeExpires = null;
+      if (expires && typeof expires === 'string') {
+        const t = Date.parse(expires);
+        if (Number.isFinite(t)) safeExpires = new Date(t).toISOString();
+      }
+      return {
+        eyebrow: eyebrow || null,
+        // Heading and code are required; default to sane placeholders so a
+        // half-saved widget renders something instead of crashing the
+        // route. Real validation lives on the admin form.
+        heading: heading || 'Special offer',
+        body: body || null,
+        code: code || 'SAVE',
+        ctaLabel: ctaLabel || null,
+        ctaLink: ctaLink || '/',
+        ctaNewTab: ctaNewTab !== undefined ? Boolean(ctaNewTab) : false,
+        expires: safeExpires,
+        borderStyle: allowedBorders.includes(borderStyle)
+          ? borderStyle
+          : 'dashed',
+        backgroundColor:
+          typeof backgroundColor === 'string' && backgroundColor.length > 0
+            ? backgroundColor
+            : null
+      };
+    },
+    faqBlockWidget(_, { heading, sections, maxWidth, allowMultipleOpen }) {
+      // `sections` storage is a JSONB array — defend against null/garbage so
+      // a broken setting doesn't 500 the entire route. Each section is a
+      // discriminated union (prose | faq); we keep only the recognised types.
+      const safeSections = (Array.isArray(sections) ? sections : [])
+        .filter((s) => s && typeof s === 'object' && (s.type === 'prose' || s.type === 'faq'))
+        .map((s) => {
+          if (s.type === 'prose') {
+            // Prose content is the EditorJS Row[] shape. May arrive as an
+            // array (parsed) or a JSON-stringified array (form-stored). Pass
+            // through; the storefront component handles both shapes.
+            return { id: s.id, type: 'prose', content: s.content ?? [] };
+          }
+          return {
+            id: s.id,
+            type: 'faq',
+            heading: s.heading || null,
+            items: (Array.isArray(s.items) ? s.items : [])
+              .filter((it) => it && typeof it === 'object' && it.question)
+              .map((it) => ({
+                id: it.id,
+                question: String(it.question),
+                answer: it.answer ? String(it.answer) : ''
+              }))
+          };
+        });
+      const allowedWidths = ['narrow', 'normal', 'wide'];
+      return {
+        heading: heading || null,
+        sections: safeSections,
+        maxWidth: allowedWidths.includes(maxWidth) ? maxWidth : 'normal',
+        allowMultipleOpen:
+          allowMultipleOpen !== undefined ? Boolean(allowMultipleOpen) : false
+      };
+    },
+    trustStripWidget(
+      _,
+      { items, columns, showIcons, iconSize, alignment, divider }
+    ) {
+      // Coerce items defensively — JSONB storage doesn't enforce nullness,
+      // so missing `link` should be null (not undefined) and missing
+      // `description` should be null (not empty string) so the storefront
+      // can branch cleanly.
+      const safeItems = (Array.isArray(items) ? items : [])
+        .filter((it) => it && typeof it === 'object' && it.title)
+        .map((it) => {
+          const iw = Number(it.iconWidth);
+          const ih = Number(it.iconHeight);
+          return {
+            id: it.id,
+            icon: it.icon || null,
+            iconWidth: Number.isFinite(iw) && iw > 0 ? Math.round(iw) : null,
+            iconHeight: Number.isFinite(ih) && ih > 0 ? Math.round(ih) : null,
+            title: String(it.title),
+            description: it.description || null,
+            link:
+              it.link && it.link.url
+                ? { url: it.link.url, newTab: !!it.link.newTab }
+                : null
+          };
+        });
+      const allowedIconSize = ['sm', 'md', 'lg'].includes(iconSize)
+        ? iconSize
+        : 'md';
+      const allowedAlignment = alignment === 'left' ? 'left' : 'center';
+      const colsNum = Number(columns);
+      return {
+        items: safeItems,
+        columns:
+          Number.isFinite(colsNum) && colsNum >= 2 && colsNum <= 6
+            ? Math.round(colsNum)
+            : null,
+        showIcons: showIcons !== undefined ? Boolean(showIcons) : true,
+        iconSize: allowedIconSize,
+        alignment: allowedAlignment,
+        divider: divider !== undefined ? Boolean(divider) : false
       };
     },
     basicMenuWidget: async (_, { settings }, { pool }) => {

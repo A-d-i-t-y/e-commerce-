@@ -31,18 +31,16 @@ import { EvershopResponse } from '../../../../types/response.js';
  *         current, restricted to this route. No-op when no future op exists.
  *
  * Storage order (`change_order`) stays globally monotonic — only the apply
- * window is per-route. `current_change` is kept in sync as the denormalized
- * "highest applied op anywhere in the changeset" for back-compat with
- * consumers that still read it.
+ * window is per-route.
  *
- * Returns `{ direction, route, routeCursors, canUndo, canRedo, currentChange }`.
+ * Returns `{ direction, route, routeCursors, currentChangeOrder, canUndo, canRedo }`.
  */
 // 3-arg signature: avoid auto-next behavior of 2-arg handlers (causes
 // ERR_HTTP_HEADERS_SENT via apiResponse).
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const changesetId = Number(request.params.id);
@@ -100,16 +98,37 @@ export default async (
       ((changeset as any).route_cursors as Record<string, number> | null) ?? {};
     const routeCursorOrder = Number(routeCursors[route] ?? 0);
 
+    // Rollout-attached changesets have a floor: the rollout's snapshot cursor
+    // for this route. Undo can't go below it — the floor IS what the live
+    // storefront currently shows, and undoing past it would create a state
+    // where the editor view is below the live state, which we don't allow
+    // (see wiki/page-builder.md — "block edits below saved cursor"). To
+    // revert past the floor the user must use Discard or Cancel rollout.
+    const rolloutPlan = await select()
+      .from('rollout_plan')
+      .where('changeset_id', '=', changesetId)
+      .load(conn);
+    const floor = rolloutPlan
+      ? Number(
+          (
+            ((rolloutPlan as any).route_cursors as Record<string, number> | null) ??
+            {}
+          )[route] ?? 0
+        )
+      : 0;
+
     let newCursorOrder: number;
     if (direction === 'undo') {
-      // Largest change_order strictly less than current, on this route.
+      // Largest change_order strictly less than current, on this route, but
+      // not below the floor.
       const q = select('change_order').from('changeset_operation');
       q.where('changeset_id', '=', changesetId)
         .and('route', '=', route)
-        .and('change_order', '<', routeCursorOrder);
+        .and('change_order', '<', routeCursorOrder)
+        .and('change_order', '>=', floor);
       q.orderBy('change_order', 'desc');
       const rows = await q.execute(conn);
-      newCursorOrder = rows[0] ? Number((rows[0] as any).change_order) : 0;
+      newCursorOrder = rows[0] ? Number((rows[0] as any).change_order) : floor;
     } else {
       // Smallest change_order strictly greater than current, on this route.
       const q = select('change_order').from('changeset_operation');
@@ -133,42 +152,23 @@ export default async (
       delete nextRouteCursors[route];
     }
 
-    // Derived denormalized "highest applied op anywhere" for back-compat.
-    // Looks up the changeset_operation_id matching the highest cursor across
-    // all routes; null if no route has any applied ops.
-    const allCursorOrders = Object.values(nextRouteCursors).filter(
-      (n) => typeof n === 'number' && n > 0
-    );
-    let newCurrentChangeId: number | null = null;
-    if (allCursorOrders.length > 0) {
-      const maxOrder = Math.max(...allCursorOrders);
-      const row = await select('changeset_operation_id')
-        .from('changeset_operation')
-        .where('changeset_id', '=', changesetId)
-        .and('change_order', '=', maxOrder)
-        .load(conn);
-      newCurrentChangeId = row
-        ? Number((row as any).changeset_operation_id)
-        : null;
-    }
-
     await conn.query(
       `UPDATE changeset
          SET route_cursors = $1::jsonb,
-             current_change = $2,
              updated_at = NOW()
-       WHERE changeset_id = $3`,
-      [JSON.stringify(nextRouteCursors), newCurrentChangeId, changesetId]
+       WHERE changeset_id = $2`,
+      [JSON.stringify(nextRouteCursors), changesetId]
     );
 
-    // Compute canUndo / canRedo for this route post-move so the client can
-    // refresh its button state in one round-trip.
+    // canUndo is now "is the cursor above the floor on this route", since the
+    // floor pins the lower bound. In draft mode floor=0 so this reduces to
+    // the old "cursor > 0" check.
     const undoExists = await select('changeset_operation_id')
       .from('changeset_operation')
       .where('changeset_id', '=', changesetId)
       .and('route', '=', route)
       .and('change_order', '<=', newCursorOrder)
-      .and('change_order', '>', 0)
+      .and('change_order', '>', floor)
       .load(conn);
     const redoExists = await select('changeset_operation_id')
       .from('changeset_operation')
@@ -184,9 +184,8 @@ export default async (
         direction,
         route,
         routeCursors: nextRouteCursors,
-        currentChange: newCurrentChangeId,
         currentChangeOrder: newCursorOrder,
-        canUndo: !!undoExists && newCursorOrder > 0,
+        canUndo: !!undoExists && newCursorOrder > floor,
         canRedo: !!redoExists
       }
     });

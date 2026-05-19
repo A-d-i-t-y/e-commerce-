@@ -80,10 +80,33 @@ export interface Widget<T = any> {
   type: string;
   description?: string;
   category?: WidgetCategory;
+  /**
+   * Optional lucide-react icon name (e.g. `Columns`, `Type`, `Image`) used
+   * to badge the widget in the page-builder palette and Layers tab. Looked
+   * up against a curated map in `pageBuilder/components/widgetIcons.ts`;
+   * unknown names (and missing values) fall back to the generic `Layers`
+   * icon. The full lucide catalog isn't whitelisted — extensions that need
+   * an icon outside the curated set should send a PR to extend the map.
+   */
+  icon?: string;
   settingComponent: string;
   settingComponentKey?: string;
   component: string;
   componentKey?: string;
+  /**
+   * Mandatory path to the React component rendered in the page-builder
+   * Widgets palette's hover preview card. The component receives no props
+   * — it should render a self-contained stylized mock (rectangles, lines,
+   * stand-ins) so it works without runtime data / context. See the demo
+   * (`specifications/page-builder-design/project/EverShop Page Builder.standalone.html`)
+   * `RENDERERS` map for the design pattern.
+   *
+   * Path must point to a `.js` file with an uppercase basename. Bundled
+   * into the admin build by AreaLoader under key
+   * `admin_widget_preview_<type>` and looked up by `WidgetPreviewCard`.
+   */
+  previewComponent: string;
+  previewComponentKey?: string;
   enabled: boolean;
   defaultSettings: Record<string, T>;
   /**

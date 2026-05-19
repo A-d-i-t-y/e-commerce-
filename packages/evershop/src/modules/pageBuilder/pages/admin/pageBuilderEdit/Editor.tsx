@@ -1,10 +1,8 @@
+import { Toaster, toast } from '@components/common/ui/Sonner.js';
 import axios from 'axios';
 import {
-  Calendar,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Edit3,
   Eye,
   FileText,
   Globe,
@@ -13,13 +11,10 @@ import {
   PuzzleIcon,
   Redo2,
   Search,
-  Send,
   Smartphone,
   Tablet,
-  Trash2,
   Undo2
 } from 'lucide-react';
-import PropTypes from 'prop-types';
 import React, {
   useCallback,
   useEffect,
@@ -30,6 +25,18 @@ import React, {
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { useClient, useQuery } from 'urql';
 import { v4 as uuidv4 } from 'uuid';
+import { cursorsEqual } from '../../../components/cursorsEqual.js';
+import {
+  DeviceButton,
+  type DeviceMode
+} from '../../../components/DeviceButton.js';
+import { LayerNode, type LayerWidget } from '../../../components/LayerNode.js';
+import { LeftTabButton } from '../../../components/LeftTabButton.js';
+import { PageSwitcher } from '../../../components/PageSwitcher.js';
+import { PrimaryActionButton } from '../../../components/PrimaryActionButton.js';
+import { SessionModeBadge } from '../../../components/SessionModeBadge.js';
+import { getWidgetIcon } from '../../../components/widgetIcons.js';
+import { WidgetPreviewCard } from '../../../components/WidgetPreviewCard.js';
 import { ConfirmDialog } from './ConfirmDialog.js';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog.js';
 import { ExitConfirmDialog } from './ExitConfirmDialog.js';
@@ -118,7 +125,6 @@ const ROLLOUT_PLANS_QUERY = `
 `;
 
 type LeftTab = 'widgets' | 'pages' | 'layers';
-type DeviceMode = 'desktop' | 'tablet' | 'phone';
 
 const DEVICE_WIDTHS: Record<DeviceMode, string | null> = {
   desktop: null,
@@ -131,6 +137,8 @@ interface WidgetType {
   name: string;
   description: string;
   category: string | null;
+  /** Optional lucide icon name; resolved via `getWidgetIcon`. */
+  icon: string | null;
   defaultSetting: Record<string, unknown> | null;
 }
 
@@ -147,23 +155,40 @@ interface RouteInfo {
   id: string;
   name: string;
   path: string;
+  /**
+   * Concrete URL the page-builder iframe loads. For static routes this
+   * matches `path`; for routes with URL params (e.g. `/category/:uuid`)
+   * the resolver substitutes a sample entity. May be null when the
+   * backend has nothing to sample.
+   */
+  previewPath?: string | null;
 }
 
 interface ChangesetInfo {
   changesetId: number;
   uuid: string;
   token: string;
-  currentChange: number | null;
+  /**
+   * Per-route undo/redo cursors as a JSON object. Used to diff against
+   * `rolloutPlan.routeCursors` for the Save-enabled state in rollout mode.
+   */
+  routeCursors: Record<string, number>;
   /**
    * Set when the user is editing a rollout plan's underlying changeset
    * (entered the editor via `?session=<rollout-uuid>` from SessionPicker).
    * Null when editing the user's draft. Drives the topbar SessionModeBadge
-   * appearance and the publish-button-becomes-"Save plan changes" rename.
+   * appearance and the publish-button-becomes-Save rename.
    */
   rolloutPlan?: {
     rolloutPlanId: number;
     uuid: string;
     name: string;
+    /**
+     * Snapshot of route_cursors at Save time. The live storefront overlay
+     * filters by this; the editor diffs against `changeset.routeCursors`
+     * to decide whether Save is enabled.
+     */
+    routeCursors: Record<string, number>;
     /** ISO 8601 string from luxon; nullable. Matches DateTime.text resolver. */
     startTime?: { text: string | null } | null;
     endTime?: { text: string | null } | null;
@@ -177,9 +202,13 @@ interface EditorProps {
   addOperationUrl: string;
   publishUrl: string;
   createRolloutPlanUrl: string;
+  updateRolloutPlanUrl: string;
+  syncRolloutPlanUrl: string;
+  cancelRolloutPlanUrl: string;
   moveCurrentChangeUrl: string;
   discardChangesetUrl: string;
   pickerHomeUrl: string;
+  dashboardUrl: string;
 }
 
 const PRIMARY_AREA = 'content';
@@ -202,13 +231,15 @@ export default function Editor({
   addOperationUrl,
   publishUrl,
   createRolloutPlanUrl,
+  updateRolloutPlanUrl,
+  syncRolloutPlanUrl,
+  cancelRolloutPlanUrl,
   moveCurrentChangeUrl,
   discardChangesetUrl,
-  pickerHomeUrl
+  pickerHomeUrl,
+  dashboardUrl
 }: EditorProps) {
-  const [changeOrder, setChangeOrder] = useState(
-    typeof changeset.currentChange === 'number' ? changeset.currentChange : 0
-  );
+  const [changeOrder, setChangeOrder] = useState(0);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedWidget, setSelectedWidget] = useState<SelectedWidget | null>(
@@ -229,6 +260,26 @@ export default function Editor({
   );
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isRolloutDialogOpen, setIsRolloutDialogOpen] = useState(false);
+  // Widgets-palette hover preview state. Captures the hovered widget +
+  // the row's bounding rect + the panel's right edge, so the preview card
+  // can position itself just past the sidebar. Cleared on mouse-leave,
+  // drag-start (don't shadow the drag image), and panel scroll (the
+  // anchor would otherwise drift away from the row).
+  const [hoverPreview, setHoverPreview] = useState<{
+    widget: WidgetType;
+    rect: DOMRect;
+    anchorX: number;
+  } | null>(null);
+  const leftRailRef = useRef<HTMLElement | null>(null);
+  // Schedule-editor dialog, opened by the SessionModeBadge pencil icon in
+  // rollout-edit mode. Kept separate from the rollout-create dialog above so
+  // the two flows don't share state machinery — the schedule editor uses
+  // RolloutDialog in `editingPlan` mode and submits via PATCH; the create
+  // dialog uses the same component without an editingPlan and submits via
+  // POST. Two callbacks, two booleans, one dialog component reused.
+  const [isScheduleEditorOpen, setIsScheduleEditorOpen] = useState(false);
+  const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Page-level form (spec 03 § 2). Holds settings for every widget the
@@ -257,12 +308,7 @@ export default function Editor({
   const [widgetSearch, setWidgetSearch] = useState('');
   // Per demo: starts collapsed (52px). Click any tab icon expands to 260px.
   const [leftRailCollapsed, setLeftRailCollapsed] = useState(true);
-  const [pageSwitcherOpen, setPageSwitcherOpen] = useState(false);
-  const [pageSwitcherSearch, setPageSwitcherSearch] = useState('');
-  const pageSwitcherRef = useRef<HTMLDivElement | null>(null);
   const [globalsView, setGlobalsView] = useState(false);
-  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
-  const publishMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Generic confirm-dialog state. Set the object to open the dialog; null
   // to close. The handler is stashed on the object so callers don't need
@@ -298,33 +344,10 @@ export default function Editor({
     );
   }, [globalsView, reloadCounter]);
 
-  // Close page switcher on outside click.
-  useEffect(() => {
-    if (!pageSwitcherOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const node = pageSwitcherRef.current;
-      if (!node) return;
-      if (!node.contains(e.target as Node)) setPageSwitcherOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [pageSwitcherOpen]);
-
   // (drawer outside-click effect lives below the drawerPinned state
   // declaration — declaring drawerRef here for early access.)
   const drawerRef = useRef<HTMLElement | null>(null);
 
-  // Close publish dropdown on outside click.
-  useEffect(() => {
-    if (!publishMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const node = publishMenuRef.current;
-      if (!node) return;
-      if (!node.contains(e.target as Node)) setPublishMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [publishMenuOpen]);
   // Drawer pin state — persisted to localStorage. Default unpinned per
   // spec § 7.5; click on canvas wrapper deselects when not pinned.
   const [drawerPinned, setDrawerPinned] = useState<boolean>(() => {
@@ -402,6 +425,38 @@ export default function Editor({
     }
   }, [sessionAckKey]);
 
+  // Landing via `?session=<rollout-uuid>` already represents an explicit
+  // choice (the user clicked a rollout card in the SessionPicker, or
+  // bookmarked the URL). Auto-acknowledge so the picker doesn't re-open on
+  // the very next render — every reload otherwise looped back into the
+  // same "Start a page-builder session" dialog. The SessionModeBadge
+  // remains the manual escape hatch.
+  useEffect(() => {
+    if (changeset.rolloutPlan != null && !sessionAcknowledged) {
+      acknowledgeSession();
+    }
+  }, [changeset.rolloutPlan, sessionAcknowledged, acknowledgeSession]);
+
+  // Pull the changeset's operations *before* the exit-confirm hooks below
+  // so their dependency arrays can reference `operations.length` without
+  // tripping TDZ — JS evaluates the deps array eagerly, even though the
+  // effect body runs later.
+  const [opsResult, refetchOps] = useQuery({
+    query: CHANGESET_OPS_QUERY,
+    variables: { id: changeset.changesetId },
+    pause: true
+  });
+  const operations = (opsResult.data as any)?.changeset?.operations ?? [];
+  // Set of route IDs that have any pending op in the current draft. Used
+  // to mark "Draft" status pills on the Pages tab. Spec § 7.7.
+  const routesWithDraftOps = useMemo(() => {
+    const s = new Set<string>();
+    for (const op of operations as Array<{ route?: string | null }>) {
+      if (op?.route) s.add(op.route);
+    }
+    return s;
+  }, [operations]);
+
   // Refetch ops once on mount so the session picker can decide whether
   // to surface (we need to know if the existing draft has any ops).
   useEffect(() => {
@@ -416,32 +471,106 @@ export default function Editor({
   const [pendingSavesCount, setPendingSavesCount] = useState(0);
   const [pendingExitUrl, setPendingExitUrl] = useState<string | null>(null);
 
-  // Browser-tab close — native `beforeunload` prompt when saves are
-  // outstanding. Custom UI isn't allowed for this path; the native dialog
-  // is the platform's exit-confirm.
+  // Suppresses the native `beforeunload` prompt for intentional redirects
+  // — publish, schedule-rollout, ExitConfirmDialog's Leave button, and
+  // in-editor anchor clicks. Without this, `operations.length > 0` is
+  // still true at the moment of `window.location.href = …` (the GraphQL
+  // cache hasn't refetched yet, or the changeset legitimately holds
+  // unpublished ops that survive the route switch), so the browser shows
+  // its "Leave site?" prompt right when the user already confirmed they
+  // want to leave.
+  const suppressBeforeUnloadRef = useRef(false);
+  const markIntentionalNavigation = useCallback(() => {
+    suppressBeforeUnloadRef.current = true;
+    // Belt-and-braces reset: if the navigation doesn't actually happen
+    // (e.g. a click handler later calls `preventDefault`, or the user
+    // Ctrl+clicked and we mis-detected it as a normal click), drop the
+    // flag so the next real exit attempt isn't silently allowed.
+    window.setTimeout(() => {
+      suppressBeforeUnloadRef.current = false;
+    }, 500);
+  }, []);
+
+  // Browser-tab close — native `beforeunload` prompt when there are
+  // outstanding saves OR unpublished operations. Custom UI isn't allowed
+  // for this path; the native dialog is the platform's exit-confirm.
   useEffect(() => {
-    if (pendingSavesCount === 0) return;
+    if (pendingSavesCount === 0 && operations.length === 0) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (suppressBeforeUnloadRef.current) return;
       e.preventDefault();
       // Required for some browsers; the actual string is ignored in modern browsers.
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [pendingSavesCount]);
+  }, [pendingSavesCount, operations.length]);
 
-  // Helper for in-app navigation that may need to confirm. When saves are
-  // in flight, capture the destination and open the exit-confirm dialog
-  // instead of navigating immediately.
+  // Cover the plain-anchor case: PageSwitcher and the Pages-tab now use
+  // `<a href={editPathForRoute(routeId)}>` to switch routes inside the
+  // editor. Browser navigates without going through `requestNavigation`,
+  // so we tag the click here (capture phase) and let the navigation
+  // proceed silently.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement | null)?.closest?.(
+        'a[href]'
+      ) as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target === '_blank') return;
+      const href = anchor.getAttribute('href') ?? '';
+      if (
+        href === pickerHomeUrl ||
+        href.startsWith(`${pickerHomeUrl}/`) ||
+        href.startsWith(`${pickerHomeUrl}?`)
+      ) {
+        markIntentionalNavigation();
+      }
+    };
+    document.addEventListener('click', onDocClick, true);
+    return () => document.removeEventListener('click', onDocClick, true);
+  }, [pickerHomeUrl, markIntentionalNavigation]);
+
+  // Helper for in-app navigation that may need to confirm.
+  //
+  // Confirm only when LEAVING the page-builder editor — the changeset is
+  // per-user (one draft spans every route the user edits), so route
+  // switching inside the editor preserves all unpublished work and the
+  // dialog would be noise. Logo/back links to the dashboard and any
+  // future leave-editor sites still go through the dialog.
+  //
+  // Two reasons to open it for leave-editor targets:
+  //   - In-flight saves: typing that hasn't reached the server yet.
+  //   - Saved-but-unpublished operations: the merchandiser usually wants
+  //     the "Save as rollout plan" affordance before walking away.
   const requestNavigation = useCallback(
     (url: string) => {
-      if (pendingSavesCount > 0) {
+      const stayingInEditor =
+        typeof url === 'string' &&
+        (url === pickerHomeUrl ||
+          url.startsWith(`${pickerHomeUrl}/`) ||
+          url.startsWith(`${pickerHomeUrl}?`));
+      if (stayingInEditor) {
+        markIntentionalNavigation();
+        window.location.href = url;
+        return;
+      }
+      if (pendingSavesCount > 0 || operations.length > 0) {
         setPendingExitUrl(url);
         return;
       }
+      markIntentionalNavigation();
       window.location.href = url;
     },
-    [pendingSavesCount]
+    [
+      pendingSavesCount,
+      operations.length,
+      pickerHomeUrl,
+      markIntentionalNavigation
+    ]
   );
 
   // Widgets palette: filter by search query (matches name + description),
@@ -469,21 +598,14 @@ export default function Editor({
     })).filter((g) => g.widgets.length > 0);
   }, [widgetTypes, widgetSearch, pendingParent]);
 
-  const [opsResult, refetchOps] = useQuery({
-    query: CHANGESET_OPS_QUERY,
-    variables: { id: changeset.changesetId },
-    pause: true
-  });
-  const operations = (opsResult.data as any)?.changeset?.operations ?? [];
-  // Set of route IDs that have any pending op in the current draft. Used
-  // to mark "Draft" status pills on the Pages tab. Spec § 7.7.
-  const routesWithDraftOps = useMemo(() => {
-    const s = new Set<string>();
-    for (const op of operations as Array<{ route?: string | null }>) {
-      if (op?.route) s.add(op.route);
-    }
-    return s;
-  }, [operations]);
+  // Lookup map for the Layers panel: widget code → registry entry. Lets
+  // LayerNode render the canonical widget name + description rather than the
+  // per-instance name + raw type code.
+  const widgetTypesByCode = useMemo(() => {
+    const map = new Map<string, WidgetType>();
+    for (const wt of widgetTypes) map.set(wt.code, wt);
+    return map;
+  }, [widgetTypes]);
 
   const client = useClient();
   const [layersResult, refetchLayers] = useQuery({
@@ -605,24 +727,38 @@ export default function Editor({
   const upcomingAndLiveRolloutPlans = useMemo(() => {
     const plans = (rolloutPlansResult.data as any)?.rolloutPlans ?? [];
     const now = Date.now();
-    return (plans as Array<any>)
-      .map((p) => ({
-        rolloutPlanId: p.rolloutPlanId,
-        uuid: p.uuid,
-        name: p.name,
-        startTime: (p.startTime?.text as string | null) ?? null,
-        endTime: (p.endTime?.text as string | null) ?? null
-      }))
-      .filter((p) => p.startTime != null)
-      .filter((p) => {
-        if (!p.endTime) return true; // indefinite — still actionable
-        return new Date(p.endTime).getTime() > now;
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.startTime as string).getTime() -
-          new Date(b.startTime as string).getTime()
-      );
+    type Mapped = {
+      rolloutPlanId: number;
+      uuid: string;
+      name: string;
+      startTime: string | null;
+      endTime: string | null;
+    };
+    type WithStart = Mapped & { startTime: string };
+    return (
+      (plans as Array<any>)
+        .map(
+          (p): Mapped => ({
+            rolloutPlanId: p.rolloutPlanId,
+            uuid: p.uuid,
+            name: p.name,
+            startTime: (p.startTime?.text as string | null) ?? null,
+            endTime: (p.endTime?.text as string | null) ?? null
+          })
+        )
+        // Type predicate so the downstream chain (and consumers like
+        // RolloutDialog / SessionPicker) see `startTime: string`, not
+        // `string | null`.
+        .filter((p): p is WithStart => p.startTime != null)
+        .filter((p) => {
+          if (!p.endTime) return true; // indefinite — still actionable
+          return new Date(p.endTime).getTime() > now;
+        })
+        .sort(
+          (a, b) =>
+            new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+        )
+    );
   }, [rolloutPlansResult.data]);
   const pageRoutes = useMemo(
     () =>
@@ -631,8 +767,7 @@ export default function Editor({
           r.editableInPageBuilder === true &&
           !r.isApi &&
           !r.isAdmin &&
-          typeof r.path === 'string' &&
-          !r.path.includes(':')
+          typeof r.path === 'string'
       ),
     [allRoutes]
   );
@@ -649,12 +784,17 @@ export default function Editor({
     refetchLayers({ requestPolicy: 'network-only' });
   }, [reloadCounter, refetchLayers]);
 
+  // For dynamic routes (e.g. `/category/:uuid`) the resolver substitutes a
+  // sample entity so the iframe can actually load. Static routes return
+  // their declared `path`.
+  const previewablePath = route.previewPath || route.path;
+
   const iframeSrc = useMemo(() => {
-    const sep = route.path.includes('?') ? '&' : '?';
-    return `${route.path}${sep}changeset=${encodeURIComponent(
+    const sep = previewablePath.includes('?') ? '&' : '?';
+    return `${previewablePath}${sep}changeset=${encodeURIComponent(
       changeset.token
     )}`;
-  }, [route.path, changeset.token]);
+  }, [previewablePath, changeset.token]);
 
   /**
    * Build an editor URL for a route, preserving the current session. When
@@ -701,11 +841,11 @@ export default function Editor({
   >([]);
 
   const previewBaseUrl = useMemo(() => {
-    const sep = route.path.includes('?') ? '&' : '?';
-    return `${route.path}${sep}changeset=${encodeURIComponent(
+    const sep = previewablePath.includes('?') ? '&' : '?';
+    return `${previewablePath}${sep}changeset=${encodeURIComponent(
       changeset.token
     )}&ajax=true`;
-  }, [route.path, changeset.token]);
+  }, [previewablePath, changeset.token]);
 
   /**
    * V2 server-side preview rendering. After any op is saved, fetch the
@@ -842,20 +982,39 @@ export default function Editor({
   );
 
   const handleAddWidget = useCallback(
-    async (widgetType: WidgetType) => {
+    async (
+      widgetType: WidgetType,
+      opts?: {
+        /**
+         * Pre-computed sort_order for the new placement. The iframe owns
+         * this math (see `computeDropSortOrder` and the drop-zone
+         * components in `common/page-builder/`) because only the iframe
+         * sees the full rendered ordering — widgets AND layout components
+         * interleaved. When omitted (e.g. click-to-add in the legacy
+         * palette flow), we fall back to a safe append at 100.
+         */
+        sortOrder?: number;
+        /**
+         * Override the target area. Defaults to `PRIMARY_AREA` ("content").
+         * Used when the iframe's drop zone lives in a non-primary Area
+         * (e.g. header, footer) so the placement lands where the user
+         * actually dropped.
+         */
+        area?: string;
+      }
+    ) => {
       const widgetUuid = uuidv4();
       const widgetName = `${widgetType.name} (new)`;
       const initialSettings = (widgetType.defaultSetting ?? {}) as Record<
         string,
         unknown
       >;
-      // Assign a monotonically-increasing sort_order so two widgets dropped
-      // back-to-back don't both land at 100 and collide for the same render
-      // cell (loadStorefrontWidgets de-dupes per (widget, area, sort_order)
-      // cell). 100 + N where N grows with the layer count keeps the new
-      // widget at the bottom of the content area.
+
       const nextSortOrder =
-        100 + (Array.isArray(layerWidgets) ? layerWidgets.length : 0);
+        typeof opts?.sortOrder === 'number' && !Number.isNaN(opts.sortOrder)
+          ? opts.sortOrder
+          : 100;
+      const targetArea = opts?.area ?? PRIMARY_AREA;
 
       if (pendingParent) {
         // Child widget — same shape as a top-level widget, but its placement
@@ -945,7 +1104,7 @@ export default function Editor({
           uuid: placementUuid,
           widget_instance_uuid: widgetUuid,
           route: route.id,
-          area: PRIMARY_AREA,
+          area: targetArea,
           sort_order: nextSortOrder,
           entity_urn: null
         }
@@ -959,6 +1118,9 @@ export default function Editor({
       });
       pushPreviewToIframe();
     },
+    // `layerWidgets` still consumed by the pendingParent branch (parent lookup
+    // + child placement context). Top-level drops no longer read it — they
+    // use the iframe-computed sortOrder in `opts`.
     [postOperation, pushPreviewToIframe, route.id, pendingParent, layerWidgets]
   );
 
@@ -973,6 +1135,17 @@ export default function Editor({
   // canUndo/canRedo from GraphQL and the move-current endpoint's response.
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // Local mirrors of the cursor maps so the editor can react to mutations
+  // without a full page reload. `editorCursors` advances on every op /
+  // undo / redo / discard; `savedCursors` only moves when the user clicks
+  // Save (sync). In draft mode `savedCursors` stays at `{}` and the Save
+  // button isn't rendered anyway.
+  const [editorCursors, setEditorCursors] = useState<Record<string, number>>(
+    () => changeset.routeCursors ?? {}
+  );
+  const [savedCursors, setSavedCursors] = useState<Record<string, number>>(
+    () => changeset.rolloutPlan?.routeCursors ?? {}
+  );
 
   const refreshUndoRedoState = useCallback(async () => {
     try {
@@ -982,6 +1155,10 @@ export default function Editor({
              changeset(id: $id) {
                canUndo(route: $route)
                canRedo(route: $route)
+               routeCursors
+               rolloutPlan {
+                 routeCursors
+               }
              }
            }`,
           { id: changeset.changesetId, route: route.id },
@@ -992,11 +1169,22 @@ export default function Editor({
       if (cs) {
         setCanUndo(!!cs.canUndo);
         setCanRedo(!!cs.canRedo);
+        if (cs.routeCursors) {
+          setEditorCursors(cs.routeCursors);
+        }
+        if (cs.rolloutPlan?.routeCursors) {
+          setSavedCursors(cs.rolloutPlan.routeCursors);
+        }
       }
     } catch {
       // Best-effort; the buttons stay in their last known state.
     }
   }, [client, changeset.changesetId, route.id]);
+
+  const hasUnsavedRolloutChanges = useMemo(
+    () => !cursorsEqual(editorCursors, savedCursors),
+    [editorCursors, savedCursors]
+  );
 
   // Refresh on mount, on route switch, and whenever an op gets persisted
   // (signalled via reloadCounter, which bumps after each pushPreviewToIframe).
@@ -1091,6 +1279,7 @@ export default function Editor({
         if (changesetDeleted) {
           // Full discard, or the route-scoped path emptied the changeset —
           // either way, navigate back so the picker can mint a fresh one.
+          markIntentionalNavigation();
           window.location.href = `${pickerHomeUrl}/edit/${encodeURIComponent(
             route.id
           )}`;
@@ -1124,9 +1313,26 @@ export default function Editor({
     if (isPublishing) return;
     setIsPublishing(true);
     try {
+      const opCount = operations.length;
       await axios.post(publishUrl);
       setError(null);
-      // Send the user back to the picker — the draft is consumed.
+      // Persist the success message across the redirect so the next page's
+      // mount (a fresh editor on the same route, since the picker just
+      // bounces to the first editable route) can flash a Sonner toast. Was
+      // previously a silent reload that landed straight on the session
+      // picker, leaving the merchandiser unsure whether the publish
+      // succeeded.
+      try {
+        sessionStorage.setItem(
+          'pb_publish_flash',
+          opCount === 1
+            ? '1 change published.'
+            : `${opCount} changes published.`
+        );
+      } catch {
+        // sessionStorage can throw in private modes; non-fatal.
+      }
+      markIntentionalNavigation();
       window.location.href = pickerHomeUrl;
     } catch (e) {
       const msg =
@@ -1134,10 +1340,31 @@ export default function Editor({
         (e as Error).message ??
         'Publish failed';
       setError(msg);
+      toast.error(msg);
     } finally {
       setIsPublishing(false);
     }
-  }, [publishUrl, pickerHomeUrl, isPublishing]);
+  }, [
+    publishUrl,
+    pickerHomeUrl,
+    isPublishing,
+    operations.length,
+    markIntentionalNavigation
+  ]);
+
+  // Flash the publish-success toast after the post-publish reload lands on
+  // a fresh editor instance. sessionStorage is consumed on read.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let flash: string | null = null;
+    try {
+      flash = sessionStorage.getItem('pb_publish_flash');
+      if (flash) sessionStorage.removeItem('pb_publish_flash');
+    } catch {
+      return;
+    }
+    if (flash) toast.success(flash);
+  }, []);
 
   const handleScheduleRollout = useCallback(
     async (plan: {
@@ -1162,6 +1389,7 @@ export default function Editor({
         // rollouts after scheduling.
         const dest = pendingExitUrl ?? pickerHomeUrl;
         setPendingExitUrl(null);
+        markIntentionalNavigation();
         window.location.href = dest;
       } catch (e) {
         const msg =
@@ -1178,8 +1406,104 @@ export default function Editor({
       pickerHomeUrl,
       changeset.changesetId,
       isPublishing,
-      pendingExitUrl
+      pendingExitUrl,
+      markIntentionalNavigation
     ]
+  );
+
+  // Save action for rollout-edit mode. Copies the editor's current
+  // route_cursors snapshot into the rollout plan so the live storefront
+  // catches up. User stays in the editor; state refreshes via
+  // refreshUndoRedoState so the Save button reflects the new "no changes
+  // to save" state.
+  const handleSyncRollout = useCallback(async () => {
+    if (isSyncing || !changeset.rolloutPlan) return;
+    setIsSyncing(true);
+    try {
+      await axios.post(syncRolloutPlanUrl);
+      setError(null);
+      await refreshUndoRedoState();
+    } catch (e) {
+      const msg =
+        (e as any)?.response?.data?.error?.message ??
+        (e as Error).message ??
+        'Save failed';
+      setError(msg);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [
+    syncRolloutPlanUrl,
+    isSyncing,
+    changeset.rolloutPlan,
+    refreshUndoRedoState
+  ]);
+
+  // Cancel-rollout-plan flow. Opens the generic ConfirmDialog so the
+  // destructive action requires an explicit second click. On confirm we
+  // DELETE the rollout (the underlying changeset is preserved per
+  // cancelRolloutPlan's docstring) and navigate the user to picker home —
+  // their pb-draft is untouched there, so a fresh editing session can
+  // start cleanly.
+  const handleCancelRolloutPlan = useCallback(() => {
+    if (!changeset.rolloutPlan) return;
+    const planName = changeset.rolloutPlan.name;
+    setConfirmState({
+      title: 'Cancel rollout plan?',
+      description: (
+        <>
+          The rollout plan <strong>{planName}</strong> will be removed and the
+          live storefront will stop applying its edits. The underlying changeset
+          and its pending content edits are preserved.
+        </>
+      ),
+      confirmLabel: 'Cancel rollout',
+      destructive: true,
+      onConfirm: async () => {
+        await axios.delete(cancelRolloutPlanUrl);
+        markIntentionalNavigation();
+        window.location.href = pickerHomeUrl;
+      }
+    });
+  }, [
+    cancelRolloutPlanUrl,
+    pickerHomeUrl,
+    changeset.rolloutPlan,
+    markIntentionalNavigation,
+    setConfirmState
+  ]);
+
+  // Schedule editor submit. PATCHes the rollout's name/start/end and closes
+  // the dialog on success. Refreshes via reload because the rollout name
+  // shown in SessionModeBadge comes from the props (SSR query) — easier
+  // than threading the updated values back through props.
+  const handleUpdateRolloutSchedule = useCallback(
+    async (plan: {
+      name: string;
+      startTime: string;
+      endTime: string | null;
+    }) => {
+      if (!changeset.rolloutPlan || isUpdatingSchedule) return;
+      setIsUpdatingSchedule(true);
+      try {
+        await axios.patch(updateRolloutPlanUrl, {
+          name: plan.name,
+          start_time: plan.startTime,
+          end_time: plan.endTime
+        });
+        setError(null);
+        setIsScheduleEditorOpen(false);
+        window.location.reload();
+      } catch (e) {
+        const msg =
+          (e as any)?.response?.data?.error?.message ??
+          (e as Error).message ??
+          'Failed to update rollout schedule';
+        setError(msg);
+        setIsUpdatingSchedule(false);
+      }
+    },
+    [updateRolloutPlanUrl, changeset.rolloutPlan, isUpdatingSchedule]
   );
 
   // Persist a UPDATE op for a widget's full new settings, then reload the
@@ -1319,16 +1643,16 @@ export default function Editor({
   // `columnsContainer_<parent>_col_<i>` area).
   //
   // Reads from `overlayWidgetsRef` — the post-overlay widgets list captured
-  // from the most recent storefront preview. This matters because the
-  // GraphQL `widgetsForRoute` resolver reads source state only. After a
-  // session has accumulated several reorder ops, source `sort_order` can
-  // disagree with what the iframe renders, and computing
-  // `neighbor.sortOrder ± 1` from source produces a value that ties with
-  // already-overlay-bumped widgets — visually invisible.
+  // from the most recent storefront preview. The GraphQL `widgetsForRoute`
+  // resolver reads source state only and would disagree with the iframe
+  // after several reorders.
   //
-  // Algorithm: filter overlay widgets to those rendered in this area,
-  // sort by sortOrder, find the target and its immediate neighbor, then
-  // displace one past the neighbor (single UPDATE op).
+  // Algorithm: swap the two placements' `sort_order` values via two UPDATE
+  // ops. This gives an unambiguous reorder — the earlier `neighbor ± 1`
+  // approach could collide with a third sibling already sitting at that
+  // value, and stable-sort tie-breaking then depended on PostgreSQL row
+  // iteration order, causing the moved widget to land in unexpected slots
+  // (often the very first position).
   const moveWidget = useCallback(
     async (uid: string, area: string, direction: 'up' | 'down') => {
       const overlay = overlayWidgetsRef.current;
@@ -1342,15 +1666,37 @@ export default function Editor({
       const neighborIdx = direction === 'up' ? idx - 1 : idx + 1;
       if (neighborIdx < 0 || neighborIdx >= siblings.length) return;
       const neighbor = siblings[neighborIdx];
-      const nextSort =
-        direction === 'up'
-          ? (neighbor.sortOrder ?? 0) - 1
-          : (neighbor.sortOrder ?? 0) + 1;
-      if (nextSort === me.sortOrder) return;
-      await postOperation({
+      if (!neighbor.placementUuid) return;
+      const meSort = me.sortOrder ?? 0;
+      const neighborSort = neighbor.sortOrder ?? 0;
+      // Already tied — bump my side by a small delta in the desired
+      // direction so the reorder takes visible effect. Falls back to a
+      // single UPDATE; the relative order is otherwise stable-sort dependent.
+      if (meSort === neighborSort) {
+        await postOperation({
+          entity_urn: `urn:evershop:cms:widget_placement:${me.placementUuid}`,
+          old_payload: { sort_order: meSort },
+          new_payload: {
+            sort_order: direction === 'up' ? meSort - 1 : meSort + 1
+          }
+        });
+        pushPreviewToIframe();
+        return;
+      }
+      // Swap the two `sort_order` values. Two ops with monotonic
+      // `change_order` so the overlay engine applies them in order; the
+      // intermediate tied state is never observed by the iframe (preview
+      // only refetches after both POSTs resolve).
+      const meOk = await postOperation({
         entity_urn: `urn:evershop:cms:widget_placement:${me.placementUuid}`,
-        old_payload: { sort_order: me.sortOrder ?? 0 },
-        new_payload: { sort_order: nextSort }
+        old_payload: { sort_order: meSort },
+        new_payload: { sort_order: neighborSort }
+      });
+      if (!meOk) return;
+      await postOperation({
+        entity_urn: `urn:evershop:cms:widget_placement:${neighbor.placementUuid}`,
+        old_payload: { sort_order: neighborSort },
+        new_payload: { sort_order: meSort }
       });
       pushPreviewToIframe();
     },
@@ -1662,12 +2008,20 @@ export default function Editor({
       }
       if ((msg as any).type === 'pb-drop') {
         const widgetType = (msg as any).widgetType as string;
+        const sortOrder = (msg as any).sortOrder;
+        const dropArea = (msg as any).area as string | undefined;
         const wt = widgetTypes.find((w) => w.code === widgetType);
         if (!wt) return;
-        // V1: drag-drop appends the new widget to the end of the route's
-        // primary area (same as click-to-add). Drop-between-widgets
-        // reordering would require sort_order reflow and is deferred.
-        void handleAddWidget(wt);
+        // The iframe is the source of truth for drop positioning — it walks
+        // sibling DOM elements (via `computeDropSortOrder`) and computes the
+        // midpoint sort_order locally. We just forward that value plus the
+        // target area to `handleAddWidget`. If the message lacks `sortOrder`
+        // (older iframe build, theoretically), handleAddWidget falls back to
+        // `100` which is safe but not position-aware.
+        void handleAddWidget(wt, {
+          sortOrder: typeof sortOrder === 'number' ? sortOrder : undefined,
+          area: dropArea
+        });
         return;
       }
       if ((msg as any).type === 'preview-rendered') {
@@ -1696,151 +2050,57 @@ export default function Editor({
 
   return (
     <FormProvider {...pageForm}>
-      <div className="page-builder-editor fixed inset-0 z-[1100] flex flex-col bg-background">
+      <div className="page-builder-editor fixed inset-0 z-1100 flex flex-col bg-background">
         {/* Topbar (52px) */}
-        <header className="flex items-center justify-between h-[52px] px-4 border-b border-divider bg-card shrink-0">
+        <header className="flex items-center justify-between h-13 px-4 border-b border-divider bg-card shrink-0">
           <div className="flex items-center gap-2.5">
             <a
-              href={pickerHomeUrl}
+              href={dashboardUrl}
               onClick={(e) => {
                 if (pendingSavesCount > 0) {
                   e.preventDefault();
-                  requestNavigation(pickerHomeUrl);
+                  requestNavigation(dashboardUrl);
                 }
               }}
               className="flex items-center gap-2 select-none group"
               aria-label="EverShop · Back to page builder"
             >
-              <span
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-bold tracking-tight"
-                aria-hidden="true"
+              <svg
+                viewBox="0 0 256 282"
+                fill="none"
+                className="w-6 h-auto"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                E
-              </span>
-              <span className="text-sm font-semibold text-foreground">
-                EverShop
-              </span>
+                <path
+                  d="M63.6632 35.0703L0.336842 70.1406L0.134737 140.668L0 211.26L63.7305 246.459C98.7621 265.799 127.663 281.658 128 281.658C128.337 281.658 145.785 272.117 166.872 260.513C187.891 248.844 216.589 233.05 230.602 225.314L256 211.26V196.174V181.024L254.518 181.798C253.642 182.249 224.943 198.044 190.72 216.997C156.429 235.951 128.067 251.294 127.663 251.229C127.192 251.101 104.556 238.723 77.2716 223.637L27.6211 196.239V140.797V85.3549L50.0547 72.9771C62.3158 66.2081 84.8168 53.8303 99.9747 45.4496C115.065 37.0688 127.731 30.2353 128 30.2353C128.269 30.2353 145.853 39.8409 167.074 51.574L228.918 85.3549L238.672 79.8626L256 70.1406L228.918 55.3775C207.495 43.2577 128.472 -0.0643921 127.798 9.15527e-05C127.394 9.15527e-05 98.4926 15.7946 63.6632 35.0703Z"
+                  fill="#008060"
+                />
+                <path
+                  d="M192.674 105.146C158.046 124.293 129.213 140.152 128.606 140.281C127.933 140.475 111.023 131.449 88.9937 119.329L50.5263 98.055V113.334L50.5937 128.548L87.9832 149.178C108.531 160.524 126.046 170.065 126.922 170.387C128.269 170.839 137.701 165.875 191.731 136.026C226.493 116.751 255.192 100.827 255.528 100.569C255.798 100.311 255.933 93.4133 255.865 85.226L255.663 70.334L192.674 105.146Z"
+                  fill="#008060"
+                />
+                <path
+                  d="M248.926 129.451C245.221 131.449 216.657 147.244 185.398 164.521C154.139 181.798 128.337 195.917 128 195.917C127.663 195.917 110.215 186.375 89.1284 174.771L50.8632 153.626L50.6611 168.453C50.5263 179.8 50.7284 183.474 51.3347 184.055C52.6147 185.15 127.192 226.216 128 226.216C128.674 226.216 254.451 156.914 255.528 156.011C255.798 155.753 255.933 148.855 255.865 140.603L255.663 125.712L248.926 129.451Z"
+                  fill="#008060"
+                />
+              </svg>
             </a>
             <span className="text-muted-foreground/60 select-none">/</span>
-            <div ref={pageSwitcherRef} className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setPageSwitcherOpen((v) => !v);
-                  setPageSwitcherSearch('');
-                }}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
-                  pageSwitcherOpen ? 'bg-muted/40' : 'hover:bg-muted/40'
-                }`}
-                aria-haspopup="listbox"
-                aria-expanded={pageSwitcherOpen}
-                aria-label="Switch page"
-              >
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">
-                  {route.name}
-                </span>
-                <ChevronDown className="h-3 w-3 text-muted-foreground" />
-              </button>
-              {pageSwitcherOpen && (
-                <div
-                  className="absolute left-0 top-full mt-1 z-30 w-[420px] max-h-[60vh] bg-card border border-divider rounded-md shadow-lg flex flex-col overflow-hidden"
-                  role="listbox"
-                >
-                  <div className="p-2 border-b border-divider">
-                    <div className="relative">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="search"
-                        autoFocus
-                        value={pageSwitcherSearch}
-                        onChange={(e) => setPageSwitcherSearch(e.target.value)}
-                        placeholder="Search pages…"
-                        className="w-full text-sm pl-7 pr-2 py-1.5 rounded-md bg-muted/30 border border-divider focus:outline-none focus:ring-1 focus:ring-primary"
-                        aria-label="Search pages"
-                      />
-                    </div>
-                  </div>
-                  <div className="overflow-y-auto">
-                    <div className="px-3 pt-2 text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
-                      Pages
-                    </div>
-                    <ul className="p-2 space-y-1">
-                      {pageRoutes
-                        .filter((r: any) => {
-                          const q = pageSwitcherSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            r.name.toLowerCase().includes(q) ||
-                            (r.path ?? '').toLowerCase().includes(q)
-                          );
-                        })
-                        .map((r: any) => {
-                          const isCurrent = r.id === route.id;
-                          const hasDraftOps = routesWithDraftOps.has(r.id);
-                          const target = editPathForRoute(r.id);
-                          return (
-                            <li key={r.id}>
-                              <a
-                                href={target}
-                                onClick={(e) => {
-                                  if (isCurrent) {
-                                    e.preventDefault();
-                                    setPageSwitcherOpen(false);
-                                    return;
-                                  }
-                                  if (pendingSavesCount > 0) {
-                                    e.preventDefault();
-                                    setPageSwitcherOpen(false);
-                                    requestNavigation(target);
-                                  }
-                                }}
-                                className={`block px-2 py-1.5 rounded-md text-sm transition-colors ${
-                                  isCurrent
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted/40'
-                                }`}
-                                role="option"
-                                aria-selected={isCurrent}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="truncate font-medium">
-                                    {r.name}
-                                  </span>
-                                  {isCurrent ? (
-                                    <span className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/15 text-primary">
-                                      Current
-                                    </span>
-                                  ) : hasDraftOps ? (
-                                    <span className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
-                                      Draft
-                                    </span>
-                                  ) : (
-                                    <span className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/30">
-                                      Live
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-muted-foreground truncate">
-                                  {r.path}
-                                </div>
-                              </a>
-                            </li>
-                          );
-                        })}
-                      {pageRoutes.length === 0 && (
-                        <li className="px-2 py-2 text-xs text-muted-foreground">
-                          No editable routes.
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </div>
+            <PageSwitcher
+              pageRoutes={pageRoutes}
+              currentRouteId={route.id}
+              currentRouteName={route.name}
+              routesWithDraftOps={routesWithDraftOps}
+              editPathForRoute={editPathForRoute}
+            />
             <SessionModeBadge
               rolloutPlan={changeset.rolloutPlan ?? null}
               onClick={() => setPickerOpen(true)}
+              onEditSchedule={
+                changeset.rolloutPlan
+                  ? () => setIsScheduleEditorOpen(true)
+                  : undefined
+              }
             />
           </div>
           <div className="flex items-center gap-2">
@@ -1935,62 +2195,24 @@ export default function Editor({
               <Eye className="h-3.5 w-3.5" />
               Preview
             </a>
-            <div ref={publishMenuRef} className="relative inline-flex">
-              <button
-                type="button"
-                onClick={openPublishDialog}
-                disabled={isPublishing}
-                className="inline-flex items-center h-7 px-3 rounded-l-md bg-foreground text-background text-xs font-medium border-r border-background/20 hover:opacity-90 transition-opacity disabled:opacity-60"
-              >
-                {isPublishing ? 'Publishing…' : 'Publish'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPublishMenuOpen((o) => !o)}
-                className="inline-flex items-center justify-center h-7 w-7 rounded-r-md bg-foreground text-background hover:opacity-90 transition-opacity"
-                title="More publish options"
-                aria-haspopup="menu"
-                aria-expanded={publishMenuOpen}
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {publishMenuOpen && (
-                <div
-                  className="absolute right-0 top-full mt-1.5 z-30 w-[260px] bg-card border border-divider rounded-md shadow-lg p-1"
-                  role="menu"
-                >
-                  <PublishMenuItem
-                    icon={<Send className="h-3.5 w-3.5" />}
-                    title="Publish now"
-                    description="Apply all edits to the live storefront immediately"
-                    onClick={() => {
-                      setPublishMenuOpen(false);
-                      openPublishDialog();
-                    }}
-                  />
-                  <PublishMenuItem
-                    icon={<Calendar className="h-3.5 w-3.5" />}
-                    title="Save as rollout plan…"
-                    description="Schedule these edits to roll out at a future time"
-                    onClick={() => {
-                      setPublishMenuOpen(false);
-                      setIsRolloutDialogOpen(true);
-                    }}
-                  />
-                  <div className="h-px bg-divider my-1" />
-                  <PublishMenuItem
-                    icon={<Trash2 className="h-3.5 w-3.5" />}
-                    title="Discard pending changes…"
-                    description="Choose between discarding the whole draft or just this page"
-                    onClick={() => {
-                      setPublishMenuOpen(false);
-                      handleDiscard();
-                    }}
-                    destructive
-                  />
-                </div>
-              )}
-            </div>
+            {changeset.rolloutPlan ? (
+              <PrimaryActionButton
+                mode="rollout"
+                onSave={handleSyncRollout}
+                onRevert={handleDiscard}
+                onCancelRollout={handleCancelRolloutPlan}
+                isSyncing={isSyncing}
+                hasUnsavedChanges={hasUnsavedRolloutChanges}
+              />
+            ) : (
+              <PrimaryActionButton
+                mode="draft"
+                onPublish={openPublishDialog}
+                onSaveAsRollout={() => setIsRolloutDialogOpen(true)}
+                onDiscard={handleDiscard}
+                isPublishing={isPublishing}
+              />
+            )}
           </div>
         </header>
 
@@ -2003,6 +2225,12 @@ export default function Editor({
         <div className="flex-1 flex overflow-hidden">
           {/* Left rail — tabbed: Widgets / Pages / Layers. Collapses to 52px (icons only). */}
           <aside
+            ref={leftRailRef}
+            onScroll={() => {
+              // Anchor rect would drift away from the hovered row — drop the
+              // preview rather than show a misaligned card.
+              if (hoverPreview) setHoverPreview(null);
+            }}
             className={`shrink-0 border-r border-divider bg-card overflow-y-auto flex flex-col transition-[width] duration-150 ${
               leftRailCollapsed ? 'w-[52px]' : 'w-[260px]'
             }`}
@@ -2134,8 +2362,32 @@ export default function Editor({
                                   <button
                                     type="button"
                                     draggable
-                                    onClick={() => handleAddWidget(wt)}
+                                    onMouseEnter={(e) => {
+                                      const rect = (
+                                        e.currentTarget as HTMLElement
+                                      ).getBoundingClientRect();
+                                      const panel = leftRailRef.current;
+                                      const anchorX = panel
+                                        ? panel.getBoundingClientRect().right
+                                        : rect.right;
+                                      setHoverPreview({
+                                        widget: wt,
+                                        rect,
+                                        anchorX
+                                      });
+                                    }}
+                                    onMouseLeave={() => {
+                                      setHoverPreview((cur) =>
+                                        cur && cur.widget.code === wt.code
+                                          ? null
+                                          : cur
+                                      );
+                                    }}
                                     onDragStart={(e) => {
+                                      // Drop the preview before the drag image
+                                      // is captured — otherwise the floating
+                                      // card shows up in the drag ghost.
+                                      setHoverPreview(null);
                                       e.dataTransfer.effectAllowed = 'copy';
                                       e.dataTransfer.setData(
                                         'application/x-evershop-widget',
@@ -2163,9 +2415,14 @@ export default function Editor({
                                     }}
                                     className="w-full text-left flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/40 transition-colors group cursor-grab active:cursor-grabbing select-none"
                                   >
-                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/40 border border-divider text-muted-foreground group-hover:text-foreground">
-                                      <Layers className="h-3.5 w-3.5" />
-                                    </span>
+                                    {(() => {
+                                      const WidgetIcon = getWidgetIcon(wt.icon);
+                                      return (
+                                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/40 border border-divider text-muted-foreground group-hover:text-foreground">
+                                          <WidgetIcon className="h-3.5 w-3.5" />
+                                        </span>
+                                      );
+                                    })()}
                                     <span className="min-w-0 flex-1">
                                       <span className="block text-[13px] font-medium text-foreground truncate">
                                         {wt.name}
@@ -2187,6 +2444,14 @@ export default function Editor({
                   </>
                 )}
 
+                {hoverPreview && activeLeftTab === 'widgets' && (
+                  <WidgetPreviewCard
+                    widget={hoverPreview.widget}
+                    rect={hoverPreview.rect}
+                    anchorX={hoverPreview.anchorX}
+                  />
+                )}
+
                 {activeLeftTab === 'pages' && (
                   <div className="px-2 py-2">
                     <div className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
@@ -2202,11 +2467,9 @@ export default function Editor({
                             <a
                               href={target}
                               onClick={(e) => {
-                                if (isCurrent) return;
-                                if (pendingSavesCount > 0) {
-                                  e.preventDefault();
-                                  requestNavigation(target);
-                                }
+                                if (isCurrent) e.preventDefault();
+                                // Otherwise let the anchor follow naturally
+                                // — the draft persists across routes.
                               }}
                               className={`flex items-center gap-2.5 px-2 py-2 rounded-md text-sm transition-colors ${
                                 isCurrent
@@ -2217,7 +2480,7 @@ export default function Editor({
                             >
                               <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium text-[13px] text-foreground">
+                                <span className="block truncate font-medium text-xs text-foreground">
                                   {r.name}
                                 </span>
                                 <span className="block truncate text-[11px] text-muted-foreground font-mono">
@@ -2225,18 +2488,18 @@ export default function Editor({
                                 </span>
                               </span>
                               {isCurrent ? (
-                                <span className="shrink-0 text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
+                                <span className="shrink-0 text-[10px] tracking-wide font-semibold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
                                   Current
                                 </span>
                               ) : hasDraftOps ? (
                                 <span
-                                  className="shrink-0 text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30"
+                                  className="shrink-0 text-[10px] tracking-wide font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30"
                                   title="This route has unpublished changes in your draft"
                                 >
                                   Draft
                                 </span>
                               ) : (
-                                <span className="shrink-0 text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">
+                                <span className="shrink-0 text-[10px] tracking-wide font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">
                                   Live
                                 </span>
                               )}
@@ -2259,6 +2522,7 @@ export default function Editor({
                       <LayerNode
                         key={w.uuid}
                         widget={w}
+                        widgetTypesByCode={widgetTypesByCode}
                         selectedUid={layerHighlightedUid}
                         onSelect={(uid) => {
                           setLayerHighlightedUid(uid);
@@ -2356,6 +2620,27 @@ export default function Editor({
           existingPlans={upcomingAndLiveRolloutPlans}
         />
 
+        {/* Schedule-editor instance for rollout-edit mode. Opens via the
+            pencil icon in SessionModeBadge; closes after a successful PATCH
+            and reloads to pick up the new name/window from props. */}
+        {changeset.rolloutPlan && (
+          <RolloutDialog
+            open={isScheduleEditorOpen}
+            onClose={() => {
+              if (!isUpdatingSchedule) setIsScheduleEditorOpen(false);
+            }}
+            onSubmit={handleUpdateRolloutSchedule}
+            isBusy={isUpdatingSchedule}
+            existingPlans={upcomingAndLiveRolloutPlans}
+            editingPlan={{
+              rolloutPlanId: changeset.rolloutPlan.rolloutPlanId,
+              name: changeset.rolloutPlan.name,
+              startTime: changeset.rolloutPlan.startTime?.text ?? '',
+              endTime: changeset.rolloutPlan.endTime?.text ?? null
+            }}
+          />
+        )}
+
         {(pickerOpen ||
           (!sessionAcknowledged &&
             (operations.length > 0 ||
@@ -2377,6 +2662,7 @@ export default function Editor({
               // If the user was editing a rollout and now wants the draft,
               // navigate back to the route without the session param.
               if (changeset.rolloutPlan) {
+                markIntentionalNavigation();
                 window.location.href = `${pickerHomeUrl}/edit/${encodeURIComponent(
                   route.id
                 )}`;
@@ -2388,6 +2674,7 @@ export default function Editor({
                   await axios.post(discardChangesetUrl);
                 }
                 acknowledgeSession();
+                markIntentionalNavigation();
                 window.location.href = `${pickerHomeUrl}/edit/${encodeURIComponent(
                   route.id
                 )}`;
@@ -2424,6 +2711,7 @@ export default function Editor({
           routeBreakdown={discardCounts.breakdown}
           totalOpCount={discardCounts.total}
           busy={discardBusy}
+          rolloutMode={changeset.rolloutPlan != null}
           onConfirm={(mode) => {
             void performDiscard(mode);
           }}
@@ -2432,317 +2720,33 @@ export default function Editor({
           }}
         />
 
-        {pendingExitUrl !== null && pendingSavesCount > 0 && (
-          <ExitConfirmDialog
-            pendingCount={pendingSavesCount}
-            onStay={() => setPendingExitUrl(null)}
-            onLeave={() => {
-              const target = pendingExitUrl;
-              setPendingExitUrl(null);
-              window.location.href = target;
-            }}
-            onSaveAsRollout={() => {
-              // Defer the navigation until the rollout schedule succeeds.
-              // handleScheduleRollout reads `pendingExitUrl` and navigates
-              // there instead of the rollout list.
-              setIsRolloutDialogOpen(true);
-              // Note: we keep `pendingExitUrl` set; it's cleared when
-              // handleScheduleRollout reads it.
-            }}
-          />
-        )}
+        {pendingExitUrl !== null &&
+          (pendingSavesCount > 0 || operations.length > 0) && (
+            <ExitConfirmDialog
+              pendingCount={pendingSavesCount}
+              unpublishedCount={operations.length}
+              onStay={() => setPendingExitUrl(null)}
+              onLeave={() => {
+                const target = pendingExitUrl;
+                setPendingExitUrl(null);
+                markIntentionalNavigation();
+                window.location.href = target;
+              }}
+              onSaveAsRollout={() => {
+                // Defer the navigation until the rollout schedule succeeds.
+                // handleScheduleRollout reads `pendingExitUrl` and navigates
+                // there instead of the rollout list.
+                setIsRolloutDialogOpen(true);
+                // Note: we keep `pendingExitUrl` set; it's cleared when
+                // handleScheduleRollout reads it.
+              }}
+            />
+          )}
+        <Toaster position="bottom-right" richColors />
       </div>
     </FormProvider>
   );
 }
-
-/**
- * Topbar session badge (spec § 7.6). Click reopens the SessionPicker.
- *
- *   - Editing draft: edit icon + "New changeset", muted styling.
- *   - Editing rollout: calendar icon + "Rollout: <name>" + a status pill
- *     (Scheduled / Live), violet styling per demo (publish-flow.jsx:58-76).
- */
-function SessionModeBadge({
-  rolloutPlan,
-  onClick
-}: {
-  rolloutPlan: ChangesetInfo['rolloutPlan'];
-  onClick: () => void;
-}): React.ReactElement {
-  if (!rolloutPlan) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        title="Switch session"
-        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted/40 text-muted-foreground border border-divider hover:text-foreground transition-colors"
-      >
-        <Edit3 className="h-3 w-3" />
-        New changeset
-      </button>
-    );
-  }
-  const startMs = rolloutPlan.startTime?.text
-    ? new Date(rolloutPlan.startTime.text).getTime()
-    : null;
-  const status: 'scheduled' | 'live' =
-    startMs != null && startMs > Date.now() ? 'scheduled' : 'live';
-  const pillStyles =
-    status === 'scheduled'
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-      : 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300';
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Switch session"
-      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100 transition-colors dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800/50"
-    >
-      <Calendar className="h-3 w-3" />
-      Rollout: {rolloutPlan.name}
-      <span
-        className={`ml-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${pillStyles}`}
-      >
-        {status === 'scheduled' ? 'Scheduled' : 'Live'}
-      </span>
-    </button>
-  );
-}
-
-interface LayerWidget {
-  uuid: string;
-  name: string | null;
-  type: string;
-  rawSettings: Record<string, unknown> | null;
-  columns?: Array<{
-    index: number;
-    widgets: LayerWidget[];
-  }>;
-}
-
-function LayerNode({
-  widget,
-  selectedUid,
-  onSelect,
-  depth = 0
-}: {
-  widget: LayerWidget;
-  selectedUid: string | null;
-  onSelect: (
-    uid: string,
-    type: string,
-    settings: Record<string, unknown>
-  ) => void;
-  depth?: number;
-}): React.ReactElement {
-  const isSelected = selectedUid === widget.uuid;
-  const cols = widget.columns ?? [];
-  const hasChildren = cols.some((c) => (c.widgets ?? []).length > 0);
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={() =>
-          onSelect(
-            widget.uuid,
-            widget.type,
-            (widget.rawSettings ?? {}) as Record<string, unknown>
-          )
-        }
-        style={{ paddingLeft: 8 + depth * 12 }}
-        className={`w-full text-left flex items-center gap-2 py-1.5 pr-2 rounded-md text-sm transition-colors ${
-          isSelected
-            ? 'bg-primary/10 text-primary font-medium'
-            : 'hover:bg-muted/40 text-foreground'
-        }`}
-      >
-        <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px]">
-            {widget.name || `Untitled ${widget.type}`}
-          </span>
-          <span className="block truncate text-[11px] text-muted-foreground font-mono">
-            {widget.type}
-          </span>
-        </span>
-      </button>
-      {hasChildren && (
-        <ul className="space-y-1">
-          {cols.map((col) => (
-            <React.Fragment key={col.index}>
-              {(col.widgets ?? []).length > 0 && (
-                <li>
-                  <div
-                    className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pt-1"
-                    style={{ paddingLeft: 16 + depth * 12 }}
-                  >
-                    Column {col.index + 1}
-                  </div>
-                  <ul className="space-y-1">
-                    {col.widgets.map((kid) => (
-                      <LayerNode
-                        key={kid.uuid}
-                        widget={kid}
-                        selectedUid={selectedUid}
-                        onSelect={onSelect}
-                        depth={depth + 1}
-                      />
-                    ))}
-                  </ul>
-                </li>
-              )}
-            </React.Fragment>
-          ))}
-        </ul>
-      )}
-    </li>
-  );
-}
-
-function DeviceButton({
-  mode,
-  active,
-  onClick,
-  icon: Icon,
-  label
-}: {
-  mode: DeviceMode;
-  active: boolean;
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={`Show ${label} width`}
-      title={label}
-      className={`p-1.5 rounded transition-colors ${
-        active
-          ? 'bg-card shadow-sm text-foreground'
-          : 'text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-}
-
-function LeftTabButton({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-  collapsed = false
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  collapsed?: boolean;
-}): React.ReactElement {
-  if (collapsed) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={active}
-        title={label}
-        aria-label={label}
-        className={`flex h-9 w-9 items-center justify-center rounded-md transition-colors ${
-          active
-            ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-        }`}
-      >
-        <Icon className="h-4 w-4" />
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`flex-1 py-3 text-[13px] font-medium transition-colors -mb-px border-b-2 ${
-        active
-          ? 'text-foreground border-primary'
-          : 'text-muted-foreground border-transparent hover:text-foreground'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function PublishMenuItem({
-  icon,
-  title,
-  description,
-  onClick,
-  destructive = false
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-  destructive?: boolean;
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      role="menuitem"
-      className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-md hover:bg-muted/50 transition-colors group"
-    >
-      <span
-        className={`flex h-6 w-6 items-center justify-center rounded-md mt-0.5 shrink-0 ${
-          destructive
-            ? 'bg-destructive/10 text-destructive'
-            : 'bg-muted/40 text-muted-foreground group-hover:text-foreground'
-        }`}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span
-          className={`block text-[13px] font-medium ${
-            destructive ? 'text-destructive' : 'text-foreground'
-          }`}
-        >
-          {title}
-        </span>
-        <span className="block text-[11px] text-muted-foreground mt-0.5 leading-snug">
-          {description}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-Editor.propTypes = {
-  route: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    name: PropTypes.string.isRequired,
-    path: PropTypes.string.isRequired
-  }).isRequired,
-  changeset: PropTypes.shape({
-    changesetId: PropTypes.number.isRequired,
-    uuid: PropTypes.string.isRequired,
-    token: PropTypes.string.isRequired,
-    currentChange: PropTypes.number
-  }).isRequired,
-  widgetTypes: PropTypes.array.isRequired,
-  addOperationUrl: PropTypes.string.isRequired,
-  publishUrl: PropTypes.string.isRequired,
-  createRolloutPlanUrl: PropTypes.string.isRequired,
-  moveCurrentChangeUrl: PropTypes.string.isRequired,
-  discardChangesetUrl: PropTypes.string.isRequired,
-  pickerHomeUrl: PropTypes.string.isRequired
-};
 
 export const layout = {
   areaId: 'content',
@@ -2755,16 +2759,18 @@ export const query = `
       id
       name
       path
+      previewPath
     }
     changeset(id: getContextValue("pageBuilderChangesetId")) {
       changesetId
       uuid
       token
-      currentChange
+      routeCursors
       rolloutPlan {
         rolloutPlanId
         uuid
         name
+        routeCursors
         startTime { text(format: "yyyy-LL-dd'T'HH:mm:ssZZ") }
         endTime { text(format: "yyyy-LL-dd'T'HH:mm:ssZZ") }
       }
@@ -2774,13 +2780,18 @@ export const query = `
       name
       description
       category
+      icon
       defaultSetting
     }
     addOperationUrl: url(routeId:"addChangesetOperation", params:[{key:"id", value:getContextValue("pageBuilderChangesetIdString")}])
     publishUrl: url(routeId:"publishChangeset", params:[{key:"id", value:getContextValue("pageBuilderChangesetIdString")}])
     createRolloutPlanUrl: url(routeId:"createRolloutPlan")
+    updateRolloutPlanUrl: url(routeId:"updateRolloutPlan", params:[{key:"id", value:getContextValue("pageBuilderRolloutPlanIdString")}])
+    syncRolloutPlanUrl: url(routeId:"syncRolloutPlan", params:[{key:"id", value:getContextValue("pageBuilderRolloutPlanIdString")}])
+    cancelRolloutPlanUrl: url(routeId:"cancelRolloutPlan", params:[{key:"id", value:getContextValue("pageBuilderRolloutPlanIdString")}])
     moveCurrentChangeUrl: url(routeId:"moveCurrentChange", params:[{key:"id", value:getContextValue("pageBuilderChangesetIdString")}])
     discardChangesetUrl: url(routeId:"discardChangeset", params:[{key:"id", value:getContextValue("pageBuilderChangesetIdString")}])
     pickerHomeUrl: url(routeId:"pageBuilder")
+    dashboardUrl: url(routeId:"dashboard")
   }
 `;

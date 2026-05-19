@@ -19,18 +19,22 @@ import { EvershopResponse } from '../../../../types/response.js';
 /**
  * POST /api/page-builder/changesets/:id/discard
  *
- * Two modes:
+ * Two semantic modes depending on whether the changeset is rollout-attached:
  *
- *  - **Full discard (default).** No `route` query param. Deletes all
- *    `changeset_operation` rows for the changeset, then the changeset row
- *    itself (rollout_plan rows cascade per the migration).
+ *  - **Draft (no rollout_plan).** "Discard" means "throw the edits away."
+ *    Per-route: delete ops on that route, clear the cursor entry; if the
+ *    changeset has no remaining ops, drop the changeset row too.
+ *    Full: delete all ops and the changeset row (rollout_plan rows would
+ *    cascade — but there are none in this branch).
  *
- *  - **Per-route discard.** `?route=<routeId>` query param present. Deletes
- *    only ops on that route, clears the route's entry from `route_cursors`,
- *    and recomputes `current_change` from whatever cursor remains highest.
- *    The changeset row stays alive so the user can keep editing other
- *    routes. If the per-route discard leaves the changeset with zero ops,
- *    the changeset row is removed too (no point keeping an empty draft).
+ *  - **Rollout-attached changeset.** "Discard" means "revert to the saved
+ *    snapshot." The rollout's `route_cursors` is the floor — the storefront
+ *    sees that state. We never delete the changeset or the rollout here;
+ *    we only roll back the editor's view.
+ *    Per-route: set `changeset.route_cursors[route]` back to
+ *    `rollout.route_cursors[route]` and delete ops on that route with
+ *    `change_order > restored cursor`.
+ *    Full: same, but across every route present in either cursor map.
  *
  * Refuses to discard published changesets — those are part of the audit
  * trail.
@@ -43,7 +47,7 @@ import { EvershopResponse } from '../../../../types/response.js';
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const changesetId = Number(request.params.id);
@@ -91,10 +95,84 @@ export default async (
         ? String(request.query.route)
         : null;
 
+    // Rollout-attached changesets get the "revert to saved" semantics.
+    const rolloutPlan = await select()
+      .from('rollout_plan')
+      .where('changeset_id', '=', changesetId)
+      .load(conn);
+
+    if (rolloutPlan) {
+      const savedCursors =
+        ((rolloutPlan as any).route_cursors as Record<string, number> | null) ??
+        {};
+      const editorCursors =
+        ((changeset as any).route_cursors as Record<string, number> | null) ??
+        {};
+
+      if (routeFilter) {
+        const restored = Number(savedCursors[routeFilter] ?? 0);
+        await conn.query(
+          `DELETE FROM changeset_operation
+           WHERE changeset_id = $1 AND route = $2 AND change_order > $3`,
+          [changesetId, routeFilter, restored]
+        );
+        const nextCursors: Record<string, number> = { ...editorCursors };
+        if (restored > 0) nextCursors[routeFilter] = restored;
+        else delete nextCursors[routeFilter];
+        await conn.query(
+          `UPDATE changeset
+             SET route_cursors = $1::jsonb,
+                 updated_at = NOW()
+           WHERE changeset_id = $2`,
+          [JSON.stringify(nextCursors), changesetId]
+        );
+        await commit(conn);
+        return response.status(OK).json({
+          data: {
+            discarded: true,
+            mode: 'route',
+            route: routeFilter,
+            rollout: true,
+            changesetDeleted: false
+          }
+        });
+      }
+
+      // Full revert — union of every route present in either map so we don't
+      // miss orphans (e.g. user added a new route since Save).
+      const allRoutes = new Set<string>([
+        ...Object.keys(editorCursors),
+        ...Object.keys(savedCursors)
+      ]);
+      for (const route of allRoutes) {
+        const restored = Number(savedCursors[route] ?? 0);
+        await conn.query(
+          `DELETE FROM changeset_operation
+           WHERE changeset_id = $1 AND route = $2 AND change_order > $3`,
+          [changesetId, route, restored]
+        );
+      }
+      await conn.query(
+        `UPDATE changeset
+           SET route_cursors = $1::jsonb,
+               updated_at = NOW()
+         WHERE changeset_id = $2`,
+        [JSON.stringify(savedCursors), changesetId]
+      );
+      await commit(conn);
+      return response.status(OK).json({
+        data: {
+          discarded: true,
+          mode: 'all',
+          rollout: true,
+          changesetDeleted: false
+        }
+      });
+    }
+
     if (routeFilter) {
-      // Per-route discard. Drop ops on this route, clear the cursor entry,
-      // and recompute `current_change` from the remaining highest cursor.
-      // Done in one transaction so the changeset never appears mid-state.
+      // Draft per-route discard. Drop ops on this route and clear the cursor
+      // entry. Done in one transaction so the changeset never appears mid-state.
       await conn.query(
         `DELETE FROM changeset_operation
          WHERE changeset_id = $1 AND route = $2`,
@@ -118,37 +196,19 @@ export default async (
         });
       }
 
-      // Strip the route's cursor entry, then recompute current_change from
-      // whichever route now has the highest cursor.
+      // Strip the route's cursor entry from route_cursors.
       const cursors =
         ((changeset as any).route_cursors as Record<string, number> | null) ??
         {};
       const nextCursors: Record<string, number> = { ...cursors };
       delete nextCursors[routeFilter];
 
-      const remainingMax = Object.values(nextCursors).filter(
-        (n) => typeof n === 'number' && n > 0
-      );
-      let newCurrentChangeId: number | null = null;
-      if (remainingMax.length > 0) {
-        const maxOrder = Math.max(...remainingMax);
-        const row = await conn.query(
-          `SELECT changeset_operation_id FROM changeset_operation
-           WHERE changeset_id = $1 AND change_order = $2 LIMIT 1`,
-          [changesetId, maxOrder]
-        );
-        newCurrentChangeId = row.rows[0]
-          ? Number((row.rows[0] as any).changeset_operation_id)
-          : null;
-      }
-
       await conn.query(
         `UPDATE changeset
            SET route_cursors = $1::jsonb,
-               current_change = $2,
                updated_at = NOW()
-         WHERE changeset_id = $3`,
-        [JSON.stringify(nextCursors), newCurrentChangeId, changesetId]
+         WHERE changeset_id = $2`,
+        [JSON.stringify(nextCursors), changesetId]
       );
 
       await commit(conn);
@@ -162,10 +222,8 @@ export default async (
       });
     }
 
-    // Full discard. Break the FK from changeset.current_change →
-    // changeset_operation so we can safely delete operations first.
-    // (Operations cascade-delete when the changeset row goes; we do the
-    // same in two steps for clarity.)
+    // Draft full discard. Operations cascade-delete when the changeset row
+    // goes; we do the same in two steps for clarity.
     await del('changeset_operation')
       .where('changeset_id', '=', changesetId)
       .execute(conn);

@@ -8,6 +8,14 @@ type RolloutPlan {
   uuid: String!
   name: String!
   changesetId: Int!
+  """
+  Snapshot of the linked changeset's `routeCursors` at Save time. The
+  storefront overlay reads from this map (not the live changeset cursors),
+  so it represents what is currently live for this rollout. The editor
+  diffs this against `Changeset.routeCursors` to decide whether Save is
+  enabled.
+  """
+  routeCursors: JSON!
   startTime: DateTime!
   endTime: DateTime
   createdAt: DateTime!

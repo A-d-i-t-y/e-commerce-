@@ -66,7 +66,7 @@ interface EditableProps {
   /** Allow line breaks. Default false — Enter blurs. */
   multiline?: boolean;
   /** Tag to render. Default 'span'. */
-  as?: keyof JSX.IntrinsicElements;
+  as?: React.ElementType;
   className?: string;
   /** Current text. Must be a string. */
   children?: string;
@@ -109,7 +109,7 @@ export function Editable({
 }
 
 interface PreviewProps {
-  Tag: keyof JSX.IntrinsicElements;
+  Tag: React.ElementType;
   className?: string;
   fieldPath: string;
   multiline: boolean;

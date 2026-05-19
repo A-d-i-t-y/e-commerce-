@@ -55,10 +55,16 @@ async function updateWidgetData(
   if (!widget) {
     throw new Error('Requested widget not found');
   }
-  const newWidget = await update('widget_instance')
+  // `update().execute()` is typed as `any[]` by postgres-query-builder, but
+  // the implementation returns the single updated row when the WHERE is a
+  // unique-column equality. Narrow at this boundary so downstream callers
+  // (updateWidgetPlacements, etc.) get the actual shape they use.
+  const newWidget = (await update('widget_instance')
     .given(data)
     .where('uuid', '=', uuid)
-    .execute(connection);
+    .execute(connection)) as unknown as {
+    widget_instance_id: number;
+  } & Record<string, unknown>;
 
   return newWidget;
 }

@@ -75,6 +75,10 @@ export const imageProcessor = async (
   const isExternalUrl = src.startsWith('http://') || src.startsWith('https://');
 
   if (!isExternalUrl) {
+    // Collapse any accidental duplicate slashes (e.g. `/assets//file.jpg`
+    // produced by older FileBrowser builds). Without this the regex below
+    // captured a leading `/` in the asset path and the file lookup failed.
+    src = src.replace(/\/{2,}/g, '/');
     // Special case: Handle assets path format like "/assets/media/image.png" or "/assets/image.png"
     if (src.startsWith('/assets/')) {
       // Extract the filename after '/assets/'

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { computeDropSortOrder } from './dropSortOrder.js';
 import { isInPageBuilderIframe, postToParent } from './pageBuilderMode.js';
 import { WidgetContextProvider } from './WidgetContext.js';
 
@@ -26,9 +27,13 @@ const CHROME_CSS = `
     pointer-events: auto;
   }
 
-  /* Drop zones — visible only while a page-builder drag is in flight. */
+  /* Drop zones — visible only while a page-builder drag is in flight. The
+     ::before pseudo-element renders a corner badge with the area id, sourced
+     from the zone's data-evershop-pb-area attribute. Page-scoped areas use
+     the editor's accent green; global areas (data-evershop-global) flip to
+     violet, matching the demo's "globals are violet" convention. */
   [data-evershop-pb-dropzone] {
-    height: 8px;
+    position: relative;
     margin: 0;
     background: transparent;
     border-radius: 4px;
@@ -46,6 +51,41 @@ const CHROME_CSS = `
     background: rgba(0, 128, 95, 0.25);
     border-color: rgba(0, 128, 95, 0.85);
   }
+  /* Area-id badge in the top-left corner of each drop zone, only when a
+     drag is in flight. */
+  body[data-evershop-pb-drag="true"] [data-evershop-pb-dropzone][data-evershop-pb-area]::before {
+    content: attr(data-evershop-pb-area);
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    padding: 2px 6px;
+    background: #00805f;
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    border-radius: 0 0 4px 0;
+    pointer-events: none;
+    line-height: 1;
+  }
+  /* Global-area variant: same shape, violet palette. Descendant selector
+     piggybacks on Area's data-evershop-global attribute so no extra prop
+     threading is needed — drop zones inside global Areas (header / footer /
+     etc.) get the violet treatment automatically. */
+  body[data-evershop-pb-drag="true"] [data-evershop-global="true"] [data-evershop-pb-dropzone] {
+    background: rgba(124, 58, 237, 0.10);
+    border-color: rgba(124, 58, 237, 0.35);
+  }
+  body[data-evershop-pb-drag="true"] [data-evershop-global="true"] [data-evershop-pb-dropzone][data-evershop-pb-active="true"] {
+    background: rgba(124, 58, 237, 0.25);
+    border-color: rgba(124, 58, 237, 0.85);
+  }
+  body[data-evershop-pb-drag="true"] [data-evershop-global="true"] [data-evershop-pb-dropzone][data-evershop-pb-area]::before {
+    background: #7c3aed;
+  }
 `;
 
 function ensureChromeStyleInjected(): void {
@@ -61,21 +101,51 @@ function ensureChromeStyleInjected(): void {
 // Sizes are fixed at 14px to match the demo's toolbar density.
 function ArrowUpIcon(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M12 19V5M5 12l7-7 7 7" />
     </svg>
   );
 }
 function ArrowDownIcon(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M12 5v14M19 12l-7 7-7-7" />
     </svg>
   );
 }
 function CopyIcon(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <rect x="8" y="8" width="12" height="12" rx="2" />
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
     </svg>
@@ -83,7 +153,17 @@ function CopyIcon(): React.ReactElement {
 }
 function SettingsIcon(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
     </svg>
@@ -91,7 +171,17 @@ function SettingsIcon(): React.ReactElement {
 }
 function TrashIcon(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
     </svg>
   );
@@ -171,6 +261,21 @@ interface WidgetChromeProps {
    * the admin handler operates on the right placement.
    */
   area: string;
+  /**
+   * Whether the containing Area opted into page-builder editing
+   * (`<Area editableInPageBuilder>`). When false, the after-widget drop
+   * zone is suppressed so this widget's area-level container respects its
+   * non-editable contract — selection/toolbar still render (they let the
+   * user inspect/configure existing widgets) but new drops are not allowed.
+   * `AreaStartDropZone` is gated the same way on the Area side.
+   */
+  editableInPageBuilder: boolean;
+  /**
+   * The placement's sort_order. Surfaced as `data-evershop-pb-sort-order`
+   * on the wrapper so adjacent drop zones can walk DOM siblings and read
+   * the value when computing where a new drop should land.
+   */
+  sortOrder: number;
   settings: Record<string, unknown>;
   children: React.ReactNode;
 }
@@ -179,6 +284,8 @@ export function WidgetChrome({
   uuid,
   type,
   area,
+  editableInPageBuilder,
+  sortOrder,
   settings,
   children
 }: WidgetChromeProps): React.ReactElement {
@@ -245,14 +352,18 @@ export function WidgetChrome({
       e.dataTransfer.getData('application/x-evershop-widget') ||
       e.dataTransfer.getData('text/plain');
     if (!widgetType) return;
-    (e.currentTarget as HTMLDivElement).removeAttribute(
-      'data-evershop-pb-active'
-    );
+    const zone = e.currentTarget as HTMLDivElement;
+    zone.removeAttribute('data-evershop-pb-active');
     document.body.removeAttribute('data-evershop-pb-drag');
+    // Iframe owns the math. Walk siblings to find prev/next sort_orders
+    // (both widgets and layout components carry the attribute) and post
+    // the pre-computed value to the admin.
+    const sortOrder = computeDropSortOrder(zone);
     postToParent({
       type: 'pb-drop',
       widgetType,
-      afterUid: uuid
+      area,
+      sortOrder
     });
   };
 
@@ -261,6 +372,7 @@ export function WidgetChrome({
       <div
         className="evershop-pb-widget"
         data-evershop-pb-widget-uid={uuid}
+        data-evershop-pb-sort-order={sortOrder}
         style={{
           position: 'relative'
         }}
@@ -339,18 +451,25 @@ export function WidgetChrome({
           </ChromeIconButton>
         </div>
       </div>
-      {/* Drop zone immediately AFTER this widget. Visible only when the
-          body has `data-evershop-pb-drag="true"` (set by the message
-          handler above). Native HTML5 drop fires `pb-drop` to the admin
-          with `afterUid` so the admin can compute sort_order. */}
-      <div
-        data-evershop-pb-dropzone
-        data-evershop-pb-after={uuid}
-        onDragEnter={handleDropZoneEnter}
-        onDragLeave={handleDropZoneLeave}
-        onDragOver={handleDropZoneOver}
-        onDrop={handleDropAfter}
-      />
+      {/* Drop zone immediately AFTER this widget. Gated on
+          `editableInPageBuilder` so a widget rendered inside an Area that
+          opted out of page-builder editing doesn't expose a drop affordance.
+          (Selection / toolbar above still render — they only inspect /
+          configure / delete the existing widget, which is safe.) Visible
+          only when the body has `data-evershop-pb-drag="true"` (set by the
+          message handler above). `data-evershop-pb-area` powers the corner
+          badge CSS, `computeDropSortOrder` walks siblings at drop time. */}
+      {editableInPageBuilder && (
+        <div
+          data-evershop-pb-dropzone
+          data-evershop-pb-area={area}
+          data-evershop-pb-after={uuid}
+          onDragEnter={handleDropZoneEnter}
+          onDragLeave={handleDropZoneLeave}
+          onDragOver={handleDropZoneOver}
+          onDrop={handleDropAfter}
+        />
+      )}
     </WidgetContextProvider>
   );
 }

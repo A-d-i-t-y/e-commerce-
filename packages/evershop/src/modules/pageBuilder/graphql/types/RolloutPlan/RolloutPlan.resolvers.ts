@@ -38,6 +38,20 @@ export default {
   },
 
   RolloutPlan: {
+    routeCursors: (rolloutPlan: any) => {
+      // JSONB returns as a JS object via node-postgres; defensive parse for
+      // the string case (mirrors Changeset.routeCursors resolver).
+      const v = rolloutPlan.routeCursors;
+      if (v == null) return {};
+      if (typeof v === 'string') {
+        try {
+          return JSON.parse(v);
+        } catch {
+          return {};
+        }
+      }
+      return v;
+    },
     changeset: async (rolloutPlan: any, _args: any, { pool }: any) => {
       const row = await select()
         .from('changeset')

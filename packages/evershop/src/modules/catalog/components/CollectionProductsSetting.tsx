@@ -1,16 +1,78 @@
 import Spinner from '@components/admin/Spinner.js';
-import { InputField } from '@components/common/form/InputField.js';
-import { NumberField } from '@components/common/form/NumberField.js';
 import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
-import { Input } from '@components/common/ui/Input.js';
-import { Item, ItemContent } from '@components/common/ui/Item.js';
-import { Label } from '@components/common/ui/Label.js';
 import {
   RadioGroup,
   RadioGroupItem
 } from '@components/common/ui/RadioGroup.js';
-import React from 'react';
+import { Check, ChevronDown, Search } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from 'urql';
+
+// ---------------------------------------------------------------------------
+// Drawer-style helpers (mirror Slideshow / Menu / Banner drawers).
+// ---------------------------------------------------------------------------
+
+function Field({
+  label,
+  hint,
+  children
+}: {
+  label?: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {label && (
+        <div className="text-[11px] font-semibold tracking-wide text-foreground/80">
+          {label}
+        </div>
+      )}
+      <div>{children}</div>
+      {hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}
+    </div>
+  );
+}
+
+function Section({
+  title,
+  children,
+  rightSlot
+}: {
+  title: string;
+  children: React.ReactNode;
+  rightSlot?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="rounded-md border border-divider bg-card">
+      <div className="flex w-full items-center justify-between px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 text-sm font-medium text-foreground"
+        >
+          {title}
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
+              open ? '' : '-rotate-90'
+            }`}
+          />
+        </button>
+        {rightSlot}
+      </div>
+      {open && (
+        <div className="space-y-3 border-t border-divider px-3 py-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data layer.
+// ---------------------------------------------------------------------------
 
 const SearchQuery = `
   query Query ($filters: [FilterInput!]) {
@@ -32,32 +94,36 @@ interface CollectionProductsSettingProps {
     collection?: string;
     count?: number;
     countPerRow?: number;
+    heading?: string | null;
+    subText?: string | null;
   };
 }
+
 function CollectionProductsSetting({
   collectionProductsWidget
 }: CollectionProductsSettingProps) {
   const {
     collection = '',
     count = 0,
-    countPerRow = undefined
+    countPerRow = undefined,
+    heading = '',
+    subText = ''
   } = collectionProductsWidget ?? {};
+
   const limit = 10;
-  const [inputValue, setInputValue] = React.useState<string | null>(null);
-  const [page, setPage] = React.useState(1);
-  const { setValue, watch } = useScopedFormContext();
+  const [inputValue, setInputValue] = useState<string | null>(null);
+  const [page] = useState(1);
+  const { register, setValue, watch } = useScopedFormContext();
+
   // Authoritative value for the radio comes from the page-builder form so
   // a re-mount (or saved-state recovery) reflects whatever was last picked,
-  // not just the server-rendered default. Outside the page-builder scope
-  // (standalone widgetEdit page) the watch path falls through unchanged
-  // and behaves the same as before.
-  const watchedCollection = watch('settings.collection') as
-    | string
-    | undefined;
+  // not just the server-rendered default.
+  const watchedCollection = watch('settings.collection') as string | undefined;
   const selectedCollection =
     typeof watchedCollection === 'string' && watchedCollection.length > 0
       ? watchedCollection
       : collection;
+
   const [result, reexecuteQuery] = useQuery({
     query: SearchQuery,
     variables: {
@@ -75,125 +141,195 @@ function CollectionProductsSetting({
     pause: true
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     reexecuteQuery({ requestPolicy: 'network-only' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const timer = setTimeout(() => {
       if (inputValue !== null) {
         reexecuteQuery({ requestPolicy: 'network-only' });
       }
-    }, 1500);
-
+    }, 800);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue]);
-
-  React.useEffect(() => {
-    reexecuteQuery({ requestPolicy: 'network-only' });
-  }, [page]);
 
   const { data, fetching, error } = result;
 
+  // Resolve the picked collection's name so the heading placeholder can show
+  // the natural fallback ("Defaults to Sneakers" rather than a generic
+  // "Defaults to the collection name"). Falls back to the generic copy
+  // until the collection list lands.
+  const pickedCollectionName: string | null = (() => {
+    if (!selectedCollection) return null;
+    const found = (data?.collections?.items ?? []).find(
+      (c: { code: string; name: string }) => c.code === selectedCollection
+    );
+    return (found as { name: string } | undefined)?.name ?? null;
+  })();
+
   if (error) {
     return (
-      <p className="text-destructive">
-        There was an error fetching collections.
-        {error.message}
+      <p className="text-xs text-destructive">
+        There was an error fetching collections. {error.message}
       </p>
     );
   }
 
   return (
-    <div>
-      <div>
-        <div className="mb-3">
-          <Input
-            type="text"
-            value={inputValue || ''}
-            placeholder="Search collections"
-            onChange={(e) => setInputValue(e.target.value)}
-          />
-        </div>
+    <div className="space-y-3">
+      {/* Collection picker */}
+      <Section title="Collection">
+        <Field label="Search">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={inputValue || ''}
+              placeholder="Search collections…"
+              onChange={(e) => setInputValue(e.target.value)}
+              className="w-full rounded-md border border-divider bg-card pl-7 pr-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+        </Field>
+
         {fetching && (
-          <Item variant={'outline'}>
-            <ItemContent>
-              <Spinner width={25} height={25} />
-            </ItemContent>
-          </Item>
-        )}
-        {!fetching && data && (
-          <div>
-            {data.collections.items.length === 0 && (
-              <div className="p-2 border border-divider rounded flex justify-center items-center">
-                {inputValue ? (
-                  <p>
-                    No collections found for query &quot;{inputValue}&rdquo;
-                  </p>
-                ) : (
-                  <p>You have no collections to display</p>
-                )}
-              </div>
-            )}
-            <RadioGroup
-              value={selectedCollection}
-              onValueChange={(value) => {
-                setValue('settings.collection', value, {
-                  shouldDirty: true,
-                  shouldTouch: true
-                });
-              }}
-            >
-              <div className="divide-y mb-2">
-                {data.collections.items.map((collection) => (
-                  <div
-                    key={collection.uuid}
-                    className="grid grid-cols-8 gap-5 py-3 border-divider items-center"
-                  >
-                    <div className="col-span-6">
-                      <Label>{collection.name}</Label>
-                    </div>
-                    <div className="col-span-2 flex items-center justify-end">
-                      <RadioGroupItem value={collection.code} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <InputField
-                type="hidden"
-                name="settings[collection]"
-                required
-                validation={{
-                  required: 'Please select a collection'
-                }}
-                defaultValue={selectedCollection}
-              />
-            </RadioGroup>
+          <div className="flex items-center justify-center py-4">
+            <Spinner width={20} height={20} />
           </div>
         )}
-      </div>
-      <div className="mt-3 space-y-3">
-        <NumberField
-          name="settings[count]"
-          label="Total products"
-          defaultValue={count}
-          required
-          validation={{ min: 1, required: 'Count is required' }}
-          min={1}
-          placeholder="Number of products"
-        />
-        <div className="form-field">
-          <NumberField
-            name="settings[countPerRow]"
-            label="Products per row"
-            min={1}
-            validation={{ min: 1, required: 'Count per row is required' }}
-            required
-            defaultValue={countPerRow}
-            placeholder="Number of products per row"
+
+        {!fetching && data && (
+          <>
+            {data.collections.items.length === 0 ? (
+              <div className="rounded-md border border-dashed border-divider px-3 py-4 text-center text-xs text-muted-foreground">
+                {inputValue ? (
+                  <>No collections match &ldquo;{inputValue}&rdquo;.</>
+                ) : (
+                  <>You have no collections yet.</>
+                )}
+              </div>
+            ) : (
+              <RadioGroup
+                value={selectedCollection}
+                onValueChange={(value) => {
+                  setValue('settings.collection', value, {
+                    shouldDirty: true,
+                    shouldTouch: true
+                  });
+                }}
+              >
+                <ul className="space-y-1">
+                  {data.collections.items.map(
+                    (c: { uuid: string; code: string; name: string }) => {
+                      const active = selectedCollection === c.code;
+                      return (
+                        <li key={c.uuid}>
+                          <label
+                            className={`flex cursor-pointer items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                              active
+                                ? 'border-primary/40 bg-primary/5'
+                                : 'border-divider hover:bg-muted/40'
+                            }`}
+                          >
+                            <span
+                              className={`truncate ${
+                                active ? 'font-medium' : ''
+                              }`}
+                            >
+                              {c.name}
+                            </span>
+                            <RadioGroupItem
+                              value={c.code}
+                              className="shrink-0"
+                            />
+                          </label>
+                        </li>
+                      );
+                    }
+                  )}
+                </ul>
+              </RadioGroup>
+            )}
+            {/* Hidden field — keeps the standalone widgetEdit `<form>` submitting
+                the selected collection on Save (the drawer auto-save reads
+                from form state directly). */}
+            <input
+              type="hidden"
+              {...register('settings.collection', {
+                required: 'Please select a collection'
+              })}
+              defaultValue={selectedCollection || ''}
+            />
+          </>
+        )}
+      </Section>
+
+      {/* Content overrides */}
+      <Section title="Content">
+        <Field
+          label="Heading"
+          hint={
+            pickedCollectionName
+              ? `Defaults to "${pickedCollectionName}" (the collection's name).`
+              : "Defaults to the picked collection's name."
+          }
+        >
+          <input
+            type="text"
+            {...register('settings.heading')}
+            defaultValue={heading ?? ''}
+            placeholder={pickedCollectionName ?? 'Collection name'}
+            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
-        </div>
-      </div>
+        </Field>
+        <Field
+          label="Sub-text"
+          hint="Defaults to the collection's description. Setting this replaces the rich-text description with plain text."
+        >
+          <textarea
+            {...register('settings.subText')}
+            defaultValue={subText ?? ''}
+            placeholder="e.g. Hand-picked styles for the season."
+            rows={2}
+            className="w-full resize-vertical rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </Field>
+      </Section>
+
+      {/* Layout */}
+      <Section title="Layout">
+        <Field label="Total products" hint="Number of products to display.">
+          <input
+            type="number"
+            min={1}
+            {...register('settings.count', {
+              required: 'Count is required',
+              min: 1,
+              valueAsNumber: true
+            })}
+            defaultValue={count || ''}
+            placeholder="e.g. 8"
+            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </Field>
+        <Field label="Products per row" hint="Grid columns (1–6 typical).">
+          <input
+            type="number"
+            min={1}
+            {...register('settings.countPerRow', {
+              required: 'Count per row is required',
+              min: 1,
+              valueAsNumber: true
+            })}
+            defaultValue={countPerRow ?? ''}
+            placeholder="e.g. 4"
+            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </Field>
+      </Section>
     </div>
   );
 }
@@ -201,11 +337,25 @@ function CollectionProductsSetting({
 export default CollectionProductsSetting;
 
 export const query = `
-  query Query($collection: String, $count: Int, $countPerRow: Int) {
-    collectionProductsWidget(collection: $collection, count: $count, countPerRow: $countPerRow) {
+  query Query(
+    $collection: String
+    $count: Int
+    $countPerRow: Int
+    $heading: String
+    $subText: String
+  ) {
+    collectionProductsWidget(
+      collection: $collection
+      count: $count
+      countPerRow: $countPerRow
+      heading: $heading
+      subText: $subText
+    ) {
       collection
       count
       countPerRow
+      heading
+      subText
     }
   }
 `;
@@ -213,5 +363,7 @@ export const query = `
 export const variables = `{
   collection: getWidgetSetting("collection"),
   count: getWidgetSetting("count"),
-  countPerRow: getWidgetSetting("countPerRow")
+  countPerRow: getWidgetSetting("countPerRow"),
+  heading: getWidgetSetting("heading"),
+  subText: getWidgetSetting("subText")
 }`;

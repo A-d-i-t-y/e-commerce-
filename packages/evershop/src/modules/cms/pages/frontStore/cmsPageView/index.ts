@@ -1,5 +1,5 @@
-import { CmsUrn } from '../../../../../lib/urn/index.js';
 import { pool } from '../../../../../lib/postgres/connection.js';
+import { CmsUrn } from '../../../../../lib/urn/index.js';
 import { EvershopResponse } from '../../../../../types/response.js';
 import { setPageMetaInfo } from '../../../../cms/services/pageMetaInfo.js';
 import { setContextValue } from '../../../../graphql/services/contextHelper.js';

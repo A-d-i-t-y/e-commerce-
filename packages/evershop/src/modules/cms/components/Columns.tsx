@@ -1,23 +1,94 @@
 import Area from '@components/common/Area.js';
 import {
   isPageBuilderActive,
-  postToParent,
   useWidgetUid
 } from '@components/common/page-builder/index.js';
 import React, { useEffect, useState } from 'react';
+
+export type ColumnAnchor =
+  | 'tl'
+  | 'tc'
+  | 'tr'
+  | 'ml'
+  | 'mc'
+  | 'mr'
+  | 'bl'
+  | 'bc'
+  | 'br';
 
 interface ColumnsProps {
   columnsWidget: {
     columnCount: number;
     gap: number;
+    ratio?: string | null;
+    background?: string | null;
+    padding?: string | null;
+    /** 9-anchor content alignment applied uniformly to every column. The
+     *  inner Area is wrapped in a flex container; the anchor maps to
+     *  `justify-*` (main axis) + `items-*` (cross axis) classes. */
+    contentPosition?: ColumnAnchor | null;
+  };
+}
+
+// Anchor → flex classes. Mirrors the slideshow widget's mapping. The Area
+// inside each column already takes the full width when needed; the
+// alignment kicks in for shorter content (e.g. a single text block sitting
+// inside a tall column band).
+const ANCHOR_CLASS: Record<ColumnAnchor, string> = {
+  tl: 'justify-start items-start text-left',
+  tc: 'justify-start items-center text-center',
+  tr: 'justify-start items-end text-right',
+  ml: 'justify-center items-start text-left',
+  mc: 'justify-center items-center text-center',
+  mr: 'justify-center items-end text-right',
+  bl: 'justify-end items-start text-left',
+  bc: 'justify-end items-center text-center',
+  br: 'justify-end items-end text-right'
+};
+
+// Responsive padding presets — fixed string literals so Tailwind's JIT
+// picks them up. Vertical scales faster than horizontal across breakpoints
+// because hero-like rows usually want a tall band on desktop without
+// crushing mobile viewports.
+const PADDING_CLASS: Record<string, string> = {
+  none: '',
+  sm: 'py-3 px-3 md:py-4 md:px-4',
+  md: 'py-5 px-4 md:py-7 md:px-6',
+  lg: 'py-7 px-4 md:py-12 md:px-8',
+  xl: 'py-10 px-4 md:py-16 md:px-12'
+};
+
+function parseRatio(
+  ratio: string | null | undefined,
+  fallbackCount: number
+): { parts: number[]; gridCols: string } {
+  const raw =
+    typeof ratio === 'string' && ratio.length > 0
+      ? ratio
+      : Array.from({ length: Math.max(1, fallbackCount) }, () => '1').join('-');
+  const parts = raw
+    .split('-')
+    .map((p) => Math.max(1, Math.min(6, Number(p) || 1)));
+  return {
+    parts,
+    gridCols: parts.map((p) => `${p}fr`).join(' ')
   };
 }
 
 /**
- * Container widget. Renders `columnCount` Areas, each with a synthetic id
+ * Container widget. Renders one Area per column with synthetic id
  * `columnsContainer_<uid>_col_<index>`. `loadWidgetInstances` emits this
- * widget's children with matching `areaId` values, so child widgets render
- * inside their column via the standard Area mechanism.
+ * widget's children with matching `areaId` values, so child widgets
+ * render inside their column via the standard Area mechanism.
+ *
+ * Layout knobs (all optional, sane fallbacks):
+ *   - `ratio` — e.g. "1-1", "1-2-1". Drives column count + proportions.
+ *     Falls back to evenly-split `columnCount` for back-compat with widgets
+ *     saved before the ratio field existed.
+ *   - `gap` — pixel gap between columns.
+ *   - `background` — hex color applied to the row container.
+ *   - `padding` — preset (`none|sm|md|lg|xl`) mapped to responsive
+ *     Tailwind classes so mobile breakpoints don't crush the layout.
  *
  * Outside the page builder, `useWidgetUid` returns the widget's uuid via
  * the `WidgetContextProvider` mounted by `WidgetChrome` for every widget
@@ -25,7 +96,14 @@ interface ColumnsProps {
  * provider, no DOM overhead).
  */
 export default function Columns({
-  columnsWidget: { columnCount, gap }
+  columnsWidget: {
+    columnCount,
+    gap,
+    ratio,
+    background,
+    padding,
+    contentPosition
+  }
 }: ColumnsProps) {
   const uid = useWidgetUid();
   // SSR-stable mode detection: first render passes through identically.
@@ -34,88 +112,99 @@ export default function Columns({
     setInPb(isPageBuilderActive());
   }, []);
 
-  const safeCount = Math.max(1, Math.min(4, columnCount || 2));
   const safeGap = typeof gap === 'number' ? Math.max(0, Math.min(80, gap)) : 16;
+  const { parts, gridCols } = parseRatio(ratio, columnCount || 2);
+  const paddingClass = PADDING_CLASS[padding || 'none'] ?? '';
+  const wrapperBg = background || undefined;
+  const anchor = (contentPosition || 'mc') as ColumnAnchor;
+  const anchorClass = ANCHOR_CLASS[anchor] ?? ANCHOR_CLASS.mc;
 
   if (!uid) return null;
 
   return (
     <div
-      className="evershop-columns"
+      className={`evershop-columns ${paddingClass}`}
       style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${safeCount}, 1fr)`,
-        gap: `${safeGap}px`,
+        backgroundColor: wrapperBg,
+        // When a background or padding is set, the row is the visual
+        // container. Without either, render flush so the parent layout
+        // controls spacing.
         width: '100%'
       }}
     >
-      {Array.from({ length: safeCount }, (_, i) => (
-        <div
-          key={i}
-          className="evershop-columns__column"
-          data-evershop-pb-column-uid={uid}
-          data-evershop-pb-column-index={i}
-          style={{
-            position: 'relative',
-            // Visual outline only inside the page builder so children
-            // know where to drop.
-            ...(inPb
-              ? {
-                  minHeight: 80,
-                  outline: '1px dashed rgba(0, 128, 95, 0.4)',
-                  outlineOffset: -2,
-                  padding: 8
-                }
-              : null)
-          }}
-        >
-          <Area id={`columnsContainer_${uid}_col_${i}`} noOuter />
-          {inPb && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                postToParent({
-                  type: 'add-to-column',
-                  parentUid: uid,
-                  columnIndex: i
-                });
-              }}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                bottom: 4,
-                transform: 'translateX(-50%)',
-                fontSize: 11,
-                padding: '4px 10px',
-                background: 'rgba(0, 128, 95, 0.9)',
-                color: '#fff',
-                border: 0,
-                borderRadius: 4,
-                cursor: 'pointer',
-                opacity: 0.85
-              }}
-              aria-label={`Add widget to column ${i + 1}`}
-            >
-              + Add to Column {i + 1}
-            </button>
-          )}
-        </div>
-      ))}
+      <div
+        className="evershop-columns__grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: gridCols,
+          gap: `${safeGap}px`,
+          width: '100%'
+        }}
+      >
+        {parts.map((_, i) => (
+          <div
+            key={i}
+            className={`evershop-columns__column flex flex-col ${anchorClass}`}
+            data-evershop-pb-column-uid={uid}
+            data-evershop-pb-column-index={i}
+            style={{
+              position: 'relative',
+              // Outline only inside the page builder so the user can see
+              // each column's bounds while dragging children in.
+              ...(inPb
+                ? {
+                    minHeight: 80,
+                    outline: '1px dashed rgba(0, 128, 95, 0.4)',
+                    outlineOffset: -2,
+                    padding: 8
+                  }
+                : null)
+            }}
+          >
+            <Area
+              id={`columnsContainer_${uid}_col_${i}`}
+              noOuter
+              editableInPageBuilder
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 export const query = `
-  query Query($columnCount: Int, $gap: Int) {
-    columnsWidget(columnCount: $columnCount, gap: $gap) {
+  query Query(
+    $columnCount: Float
+    $gap: Float
+    $ratio: String
+    $background: String
+    $padding: String
+    $contentPosition: String
+  ) {
+    columnsWidget(
+      columnCount: $columnCount
+      gap: $gap
+      ratio: $ratio
+      background: $background
+      padding: $padding
+      contentPosition: $contentPosition
+    ) {
       columnCount
       gap
+      ratio
+      background
+      padding
+      contentPosition
     }
   }
 `;
 
 export const variables = `{
   columnCount: getWidgetSetting("columnCount", 2),
-  gap: getWidgetSetting("gap", 16)
+  gap: getWidgetSetting("gap", 16),
+  ratio: getWidgetSetting("ratio"),
+  background: getWidgetSetting("background"),
+  padding: getWidgetSetting("padding"),
+  contentPosition: getWidgetSetting("contentPosition")
 }`;

@@ -30,10 +30,10 @@ import { EvershopResponse } from '../../../../types/response.js';
  *     change_order: int           // monotonic; client-allocated
  *   }
  *
- * Persists the operation row, updates the changeset's `current_change` pointer,
- * and bumps `updated_at`. Returns the persisted row. Phase 3a's contract
- * stops here — preview data (per spec § 7.3.3) lands in Phase 3b/3c when
- * the admin UI consumes it.
+ * Persists the operation row, advances this route's cursor in
+ * `route_cursors`, and bumps `updated_at`. Returns the persisted row.
+ * Phase 3a's contract stops here — preview data (per spec § 7.3.3) lands
+ * in Phase 3b/3c when the admin UI consumes it.
  */
 // 3-arg signature: with only 2 args `buildMiddlewareFunction` auto-calls
 // next() after the handler resolves, which runs apiResponse on an
@@ -42,7 +42,7 @@ import { EvershopResponse } from '../../../../types/response.js';
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const changesetId = Number(request.params.id);
@@ -152,21 +152,14 @@ export default async (
       })
       .execute(conn);
 
-    // Update this route's cursor. `current_change` stays in sync as a
-    // denormalized "highest applied op anywhere" for back-compat with any
-    // consumer still reading it.
+    // Advance this route's cursor to the just-inserted op's order.
     const nextRouteCursors = { ...routeCursors, [route]: newOrder };
     await conn.query(
       `UPDATE changeset
          SET route_cursors = $1::jsonb,
-             current_change = $2,
              updated_at = NOW()
-       WHERE changeset_id = $3`,
-      [
-        JSON.stringify(nextRouteCursors),
-        (op as any).changeset_operation_id,
-        changesetId
-      ]
+       WHERE changeset_id = $2`,
+      [JSON.stringify(nextRouteCursors), changesetId]
     );
 
     await commit(conn);

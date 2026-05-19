@@ -28,7 +28,7 @@ import { EvershopResponse } from '../../../../types/response.js';
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const body = request.body ?? {};
@@ -111,14 +111,36 @@ export default async (
   }
 
   try {
+    // Snapshot the changeset's route_cursors into the rollout. The storefront
+    // reads from rp.route_cursors (not cs.route_cursors), so this freezes the
+    // "what the storefront shows" state at create time. Subsequent edits in
+    // the editor advance cs.route_cursors; rp.route_cursors only moves when
+    // the user explicitly clicks Save (sync endpoint).
+    const cursors =
+      ((changeset as any).route_cursors as Record<string, number> | null) ?? {};
     const row = await insert('rollout_plan')
       .given({
         name,
         changeset_id: changesetId,
+        route_cursors: cursors,
         start_time: startTime,
         end_time: endTime
       })
       .execute(pool);
+    // Detach the changeset from the user's draft namespace per spec § 5.7
+    // ("the draft is reused until the user… saves it as a rollout plan, or
+    // explicitly discards it"). Renaming makes `getOrCreateDraftChangeset`
+    // skip this row, so the next editor visit mints a fresh `pb-draft-X`
+    // and the user no longer sees the rollout badge from their own draft.
+    if (
+      typeof (changeset as any).name === 'string' &&
+      (changeset as any).name.startsWith('pb-draft-')
+    ) {
+      await pool.query(
+        `UPDATE changeset SET name = $1, updated_at = NOW() WHERE changeset_id = $2`,
+        [name, changesetId]
+      );
+    }
     return response.status(CREATED).json({ data: row });
   } catch (e) {
     return response.status(INTERNAL_SERVER_ERROR).json({

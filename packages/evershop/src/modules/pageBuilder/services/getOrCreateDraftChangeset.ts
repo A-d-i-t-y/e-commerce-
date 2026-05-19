@@ -19,18 +19,27 @@ export async function getOrCreateDraftChangeset(opts: {
   changeset_id: number;
   uuid: string;
   token: string;
-  current_change: number | null;
 }> {
   const { userId } = opts;
   const name = `pb-draft-${userId}`;
 
   // Plain pool.query — the typed builder doesn't compose `IS NULL` cleanly
   // with parameter binding; using literal `IS NULL` keeps the SQL valid.
+  //
+  // Defensive `NOT EXISTS` against rollout_plan: if a previous "Save as
+  // rollout plan" left the draft attached to a rollout (createRolloutPlan
+  // now renames on success, but old rows from before that fix may still be
+  // tangled), skip it so the user gets a fresh draft instead of the rollout
+  // bleeding into the draft session.
   const existing = await pool.query(
-    `SELECT changeset_id, uuid, token, current_change
+    `SELECT changeset_id, uuid, token
        FROM changeset
       WHERE name = $1
         AND published_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM rollout_plan rp
+           WHERE rp.changeset_id = changeset.changeset_id
+        )
       LIMIT 1`,
     [name]
   );
@@ -40,8 +49,7 @@ export async function getOrCreateDraftChangeset(opts: {
     return {
       changeset_id: row.changeset_id,
       uuid: row.uuid,
-      token: row.token,
-      current_change: row.current_change ?? null
+      token: row.token
     };
   }
 
@@ -56,7 +64,6 @@ export async function getOrCreateDraftChangeset(opts: {
   return {
     changeset_id: (created as any).changeset_id,
     uuid: (created as any).uuid,
-    token: (created as any).token,
-    current_change: null
+    token: (created as any).token
   };
 }

@@ -9,6 +9,16 @@ import { ProductCollection } from '../../../services/ProductCollection.js';
 
 export default {
   Product: {
+    // `Product.weight: Weight!` is non-null in the schema, but the DB
+    // column allows null (digital products and partially-seeded fixtures
+    // ship with `weight = NULL`). Coerce to 0 so downstream `Weight.value:
+    // Float!` doesn't blow up either with "Cannot return null for
+    // non-nullable field Product.weight" or "Float cannot represent NaN".
+    // Weight.value resolver does `parseFloat(raw)`, so we pass a number.
+    weight: (product) => {
+      const w = parseFloat(product?.weight);
+      return Number.isFinite(w) ? w : 0;
+    },
     url: async (product, _, { pool }) => {
       // Get the url rewrite for this product
       const urlRewrite = await select()

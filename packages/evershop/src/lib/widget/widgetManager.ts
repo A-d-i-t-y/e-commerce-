@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import Ajv, { ValidateFunction } from 'ajv';
+import { Ajv, type ValidateFunction } from 'ajv';
 import { Kind, parse } from 'graphql';
 import { Widget, WidgetSchemaDefinition } from '../../types/widget.js';
 import { warning } from '../log/logger.js';
@@ -234,6 +234,19 @@ class WidgetManager {
       );
     }
 
+    if (!isValidJsFilePath(widget.previewComponent)) {
+      throw new Error(
+        `Cannot register widget "${widgetType}". Invalid or unresolvable previewComponent path: "${widget.previewComponent}". Please ensure it's a valid path to an existing JS file.`
+      );
+    }
+    if (!isComponentNameUppercase(widget.previewComponent)) {
+      throw new Error(
+        `Cannot register widget "${widgetType}". Preview component filename "${
+          path.parse(widget.previewComponent).name
+        }" must start with an uppercase letter.`
+      );
+    }
+
     // Schema + GraphQL validation (Phase 2b additions).
     this._validateSchemaForWidget(widget);
     this._validateGraphqlForWidget(widget);
@@ -458,7 +471,10 @@ export function getAllWidgets(): Widget[] {
     return {
       ...widget,
       settingComponentKey: generateComponentKey(widget.settingComponent),
-      componentKey: generateComponentKey(widget.component)
+      componentKey: generateComponentKey(widget.component),
+      previewComponentKey: generateComponentKey(
+        `admin_widget_preview_${widget.type}`
+      )
     };
   });
 }
@@ -477,7 +493,10 @@ export function getEnabledWidgets(): Widget[] {
       return {
         ...widget,
         settingComponentKey: generateComponentKey(widget.settingComponent),
-        componentKey: generateComponentKey(widget.component)
+        componentKey: generateComponentKey(widget.component),
+        previewComponentKey: generateComponentKey(
+          `admin_widget_preview_${widget.type}`
+        )
       };
     });
 }

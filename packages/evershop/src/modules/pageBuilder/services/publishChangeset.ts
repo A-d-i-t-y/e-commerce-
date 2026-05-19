@@ -1,5 +1,6 @@
 import {
   commit,
+  del,
   rollback,
   select,
   startTransaction,
@@ -58,6 +59,17 @@ export async function publishChangeset(changesetId: number): Promise<void> {
 
     await update('changeset')
       .given({ published_at: new Date() })
+      .where('changeset_id', '=', changesetId)
+      .execute(conn);
+
+    // Any rollout_plan rows that point at this changeset are now stale —
+    // their ops were just baked into source tables, so the overlay would be
+    // a no-op (or a confusing duplicate) and the rollout can't be edited
+    // again (its changeset is published). Delete them inside the same
+    // transaction so the publish is atomic. Without this step the page
+    // handler later falls back to draft when the user tries to edit the
+    // rollout, with no clear feedback about why.
+    await del('rollout_plan')
       .where('changeset_id', '=', changesetId)
       .execute(conn);
 

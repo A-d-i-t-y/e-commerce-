@@ -75,15 +75,30 @@ export default {
           ? JSON.parse(changeset.routeCursors)
           : changeset.routeCursors) ?? {};
       const cursorOrder = Number(cursors[args.route] ?? 0);
-      if (cursorOrder <= 0) return false;
-      // There's at least one applied op on this route that we could move
-      // back past.
+      // Rollout-attached changesets: the rollout's snapshot cursor is the
+      // floor. canUndo iff editor cursor strictly above floor on this route.
+      // Draft changesets fall through with floor = 0, matching the previous
+      // "cursorOrder > 0" semantics.
+      const rolloutRow = await select('route_cursors')
+        .from('rollout_plan')
+        .where('changeset_id', '=', changeset.changesetId)
+        .load(pool);
+      const floor = rolloutRow
+        ? Number(
+            (
+              (typeof (rolloutRow as any).route_cursors === 'string'
+                ? JSON.parse((rolloutRow as any).route_cursors)
+                : (rolloutRow as any).route_cursors) ?? {}
+            )[args.route] ?? 0
+          )
+        : 0;
+      if (cursorOrder <= floor) return false;
       const row = await select('changeset_operation_id')
         .from('changeset_operation')
         .where('changeset_id', '=', changeset.changesetId)
         .and('route', '=', args.route)
         .and('change_order', '<=', cursorOrder)
-        .and('change_order', '>', 0)
+        .and('change_order', '>', floor)
         .load(pool);
       return !!row;
     },
@@ -110,10 +125,25 @@ export default {
       args: { route: string },
       { pool }: any
     ) => {
+      // "Pending" = ops a Discard / Revert would delete:
+      //   - Draft mode (no rollout): every op on this route (Discard wipes
+      //     the whole changeset). The subquery returns NULL → COALESCE to 0
+      //     → `change_order > 0` includes everything.
+      //   - Rollout mode: ops past the saved floor on this route. Anything
+      //     at or below the floor is currently live on the storefront and
+      //     stays put after a Revert.
       const result = await pool.query(
         `SELECT COUNT(*)::int AS count
          FROM changeset_operation
-         WHERE changeset_id = $1 AND route = $2`,
+         WHERE changeset_id = $1
+           AND route = $2
+           AND change_order > COALESCE(
+             ((SELECT route_cursors
+                 FROM rollout_plan
+                WHERE changeset_id = $1
+                LIMIT 1) ->> $2)::int,
+             0
+           )`,
         [changeset.changesetId, args.route]
       );
       return Number((result.rows[0] as any)?.count ?? 0);
@@ -123,12 +153,24 @@ export default {
       _args: any,
       { pool }: any
     ) => {
+      // Same per-route "pending" semantic as `operationCountForRoute`, but
+      // grouped. The inline `route_cursors` subquery returns NULL for
+      // drafts → COALESCE to 0 → every op counts. For rollouts the floor
+      // is the per-route saved cursor. Subquery (not LEFT JOIN) so an
+      // edge-case "two rollouts on one changeset" can't double-count.
       const result = await pool.query(
-        `SELECT route, COUNT(*)::int AS count
-         FROM changeset_operation
-         WHERE changeset_id = $1
-         GROUP BY route
-         ORDER BY count DESC, route ASC`,
+        `SELECT op.route, COUNT(*)::int AS count
+         FROM changeset_operation op
+         WHERE op.changeset_id = $1
+           AND op.change_order > COALESCE(
+             ((SELECT route_cursors
+                 FROM rollout_plan
+                WHERE changeset_id = $1
+                LIMIT 1) ->> op.route)::int,
+             0
+           )
+         GROUP BY op.route
+         ORDER BY count DESC, op.route ASC`,
         [changeset.changesetId]
       );
       return result.rows.map((r: any) => ({

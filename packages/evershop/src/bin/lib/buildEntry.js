@@ -84,6 +84,27 @@ export async function buildEntry(routes, clientOnly = false) {
             default: `---${id}---`
           }
         };
+
+        // Admin bundles also ship each widget's previewComponent under a
+        // separate wildcard-area key (`admin_widget_preview_<type>`). The
+        // page-builder Widgets-palette hover card (`WidgetPreviewCard`) looks
+        // it up directly from `Area.defaultProps.components['*']`. Mirror
+        // AreaLoader's dev-mode behavior here so production builds also have
+        // the preview registry.
+        if (route.isAdmin && widget.previewComponent) {
+          const previewUrl = pathToFileURL(widget.previewComponent).toString();
+          const previewId = generateComponentKey(
+            `admin_widget_preview_${widget.type}`
+          );
+          imports.push(`import ${previewId} from '${previewUrl}';`);
+          areas['*'][previewId] = {
+            id: previewId,
+            sortOrder: 0,
+            component: {
+              default: `---${previewId}---`
+            }
+          };
+        }
       });
       contentClient += '\r\n';
       contentClient += imports.join('\r\n');

@@ -1,12 +1,12 @@
 import { select } from '@evershop/postgres-query-builder';
 import { pool } from '../../../../../lib/postgres/connection.js';
 import { getRoutes } from '../../../../../lib/router/Router.js';
-import { setContextValue } from '../../../../graphql/services/contextHelper.js';
-import { setPageMetaInfo } from '../../../../cms/services/pageMetaInfo.js';
-import { getOrCreateDraftChangeset } from '../../../services/getOrCreateDraftChangeset.js';
+import { NOT_FOUND } from '../../../../../lib/util/httpStatus.js';
 import { EvershopRequest } from '../../../../../types/request.js';
 import { EvershopResponse } from '../../../../../types/response.js';
-import { NOT_FOUND } from '../../../../../lib/util/httpStatus.js';
+import { setPageMetaInfo } from '../../../../cms/services/pageMetaInfo.js';
+import { setContextValue } from '../../../../graphql/services/contextHelper.js';
+import { getOrCreateDraftChangeset } from '../../../services/getOrCreateDraftChangeset.js';
 
 export default async (request: EvershopRequest, response: EvershopResponse) => {
   const routeId = request.params.routeId;
@@ -97,14 +97,17 @@ export default async (request: EvershopRequest, response: EvershopResponse) => {
   );
   setContextValue(request, 'pageBuilderChangesetUuid', changeset.uuid);
   setContextValue(request, 'pageBuilderChangesetToken', changeset.token);
+  // Rollout-plan-id string for URL building. Set to "0" in draft mode — the
+  // resulting sync/cancel/update URLs are never invoked there (the Editor
+  // gates them on `changeset.rolloutPlan != null`), but the GraphQL query
+  // can't conditionalize so we need a stable placeholder.
   setContextValue(
     request,
-    'pageBuilderCurrentChange',
-    changeset.current_change
+    'pageBuilderRolloutPlanIdString',
+    String(rolloutContext?.rolloutPlanId ?? 0)
   );
   // The Editor reads `Changeset.rolloutPlan` via GraphQL to detect rollout-
-  // edit mode; no separate context value needed. `rolloutContext` above is
-  // captured locally only as a defensive validation that the rollout exists
-  // and points at an unpublished changeset before we pin the editor to it.
-  void rolloutContext;
+  // edit mode; `rolloutContext` above is captured locally only as a defensive
+  // validation that the rollout exists and points at an unpublished changeset
+  // before we pin the editor to it.
 };

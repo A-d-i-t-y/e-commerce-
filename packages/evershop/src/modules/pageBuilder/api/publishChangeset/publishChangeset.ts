@@ -23,7 +23,7 @@ import { publishChangeset } from '../../services/publishChangeset.js';
 export default async (
   request: EvershopRequest,
   response: EvershopResponse,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _next: (err?: unknown) => void
 ) => {
   const changesetId = Number(request.params.id);

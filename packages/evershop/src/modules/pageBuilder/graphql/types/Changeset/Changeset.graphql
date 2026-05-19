@@ -14,12 +14,6 @@ type Changeset {
   updatedAt: DateTime!
   operations: [ChangesetOperation!]!
   """
-  Denormalized "highest applied op anywhere in the changeset". For the
-  authoritative per-route apply state see `routeCursors`. Kept for back-compat
-  with consumers that previously used it as a global cursor.
-  """
-  currentChange: Int
-  """
   Per-route undo/redo cursors: { [route]: highest_applied_change_order }.
   An op is applied iff `op.change_order <= routeCursors[op.route]` (default 0
   when absent). Each route is independent — undoing on homepage doesn't
@@ -37,13 +31,18 @@ type Changeset {
   """
   canRedo(route: String!): Boolean!
   """
-  Count of ops on a given route in this changeset (regardless of whether
-  they're in the applied region or the redo stack). Powers the per-route
-  op-count breakdown in the Discard confirmation dialog.
+  Count of "pending" ops on a route — i.e. ops that a Discard / Revert
+  would delete. In draft mode that's every op on the route (full discard
+  wipes the changeset). In rollout-edit mode that's only ops with
+  `change_order > rollout.routeCursors[route]` (ops at or below the saved
+  cursor are currently live on the storefront and stay put after a
+  Revert). Powers the per-route op-count breakdown in the Discard /
+  Revert confirmation dialog.
   """
   operationCountForRoute(route: String!): Int!
   """
-  Per-route op counts across the whole changeset:
+  Per-route "pending" op counts across the changeset. Same semantic as
+  `operationCountForRoute`, just grouped:
     [{ route: "homepage", count: 5 }, { route: "cart", count: 2 }]
   """
   operationCountsByRoute: [RouteOperationCount!]!

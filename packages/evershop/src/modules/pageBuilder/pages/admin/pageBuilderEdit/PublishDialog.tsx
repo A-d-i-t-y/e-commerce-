@@ -1,5 +1,4 @@
 import { Button } from '@components/common/ui/Button.js';
-import { ButtonGroup } from '@components/common/ui/ButtonGroup.js';
 import {
   Dialog,
   DialogContent,
@@ -8,12 +7,22 @@ import {
   DialogHeader,
   DialogTitle
 } from '@components/common/ui/Dialog.js';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Layers,
+  Minus,
+  Pencil,
+  Plus,
+  Rocket
+} from 'lucide-react';
 import React, { useMemo } from 'react';
 
 interface ChangesetOperation {
   entityUrn: string;
   oldPayload: Record<string, unknown> | null;
   newPayload: Record<string, unknown> | null;
+  route?: string | null;
 }
 
 interface PublishDialogProps {
@@ -25,40 +34,95 @@ interface PublishDialogProps {
 }
 
 interface OpSummary {
-  insertWidget: number;
-  updateWidget: number;
-  deleteWidget: number;
-  insertPlacement: number;
-  updatePlacement: number;
-  deletePlacement: number;
+  added: number;
+  updated: number;
+  removed: number;
+  total: number;
+  routes: Array<{ id: string; count: number }>;
 }
 
 function summarize(ops: ChangesetOperation[]): OpSummary {
-  const summary: OpSummary = {
-    insertWidget: 0,
-    updateWidget: 0,
-    deleteWidget: 0,
-    insertPlacement: 0,
-    updatePlacement: 0,
-    deletePlacement: 0
-  };
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+  const routeCounts = new Map<string, number>();
   for (const op of ops) {
     const isWidget = op.entityUrn?.includes(':widget_instance:');
     const isPlacement = op.entityUrn?.includes(':widget_placement:');
+    if (!isWidget && !isPlacement) continue;
     const isInsert = op.oldPayload == null && op.newPayload != null;
     const isDelete = op.oldPayload != null && op.newPayload == null;
     const isUpdate = op.oldPayload != null && op.newPayload != null;
+    // Count widget_instance ops only — placement ops are derived (every
+    // INSERT/DELETE widget pairs with a placement op; updates to widget
+    // settings vs placement sort_order are merged into a single "updated"
+    // figure). Showing both was noisy without adding signal.
     if (isWidget) {
-      if (isInsert) summary.insertWidget++;
-      else if (isUpdate) summary.updateWidget++;
-      else if (isDelete) summary.deleteWidget++;
+      if (isInsert) added += 1;
+      else if (isUpdate) updated += 1;
+      else if (isDelete) removed += 1;
     } else if (isPlacement) {
-      if (isInsert) summary.insertPlacement++;
-      else if (isUpdate) summary.updatePlacement++;
-      else if (isDelete) summary.deletePlacement++;
+      // Placement-only ops (e.g. reorder, cross-route share) count as updates.
+      if (isUpdate) updated += 1;
+      else if (isInsert) added += 0; // already counted via the widget INSERT
+      else if (isDelete) removed += 0; // already counted via the widget DELETE
+    }
+    const r = op.route;
+    if (typeof r === 'string' && r.length > 0) {
+      routeCounts.set(r, (routeCounts.get(r) ?? 0) + 1);
     }
   }
-  return summary;
+  const routes = Array.from(routeCounts.entries())
+    .map(([id, count]) => ({ id, count }))
+    .sort((a, b) => b.count - a.count);
+  return { added, updated, removed, total: ops.length, routes };
+}
+
+function humanizeRoute(id: string): string {
+  if (id === 'all') return 'every page';
+  // Camel-case route ids → spaced words: `categoryView` → `Category view`.
+  const spaced = id.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  tone: 'add' | 'update' | 'remove';
+}
+
+const TONE_CLASSES: Record<StatCardProps['tone'], string> = {
+  add: 'bg-emerald-50 text-emerald-700 ring-emerald-200/70 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900/60',
+  update:
+    'bg-sky-50 text-sky-700 ring-sky-200/70 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900/60',
+  remove:
+    'bg-rose-50 text-rose-700 ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/60'
+};
+
+function StatCard({ icon, label, count, tone }: StatCardProps) {
+  const dim = count === 0;
+  return (
+    <div
+      className={`flex flex-col gap-1 rounded-md border border-divider/60 bg-card px-3 py-2.5 transition-opacity ${
+        dim ? 'opacity-50' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-md ring-1 ${TONE_CLASSES[tone]}`}
+        >
+          {icon}
+        </span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {label}
+        </span>
+      </div>
+      <span className="ml-8 text-lg font-semibold leading-tight tabular-nums">
+        {count}
+      </span>
+    </div>
+  );
 }
 
 export function PublishDialog({
@@ -69,78 +133,123 @@ export function PublishDialog({
   operations
 }: PublishDialogProps): React.ReactElement {
   const summary = useMemo(() => summarize(operations || []), [operations]);
-  const total = operations?.length ?? 0;
+  const total = summary.total;
+  const hasOps = total > 0;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : null)}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => (!o && !isBusy ? onClose() : null)}
+    >
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Publish changes</DialogTitle>
-          <DialogDescription>
-            These edits will be applied to the live storefront immediately.
-            This cannot be undone.
-          </DialogDescription>
+          <div className="flex items-start gap-3">
+            <span
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15"
+              aria-hidden="true"
+            >
+              <Rocket className="h-5 w-5" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <DialogTitle className="text-sm font-medium">
+                {hasOps
+                  ? 'Publish to the live storefront'
+                  : 'Nothing to publish'}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                {hasOps ? (
+                  <>
+                    {total} change{total === 1 ? '' : 's'} will go live
+                    immediately. Visitors will see the new layout on their next
+                    page load.
+                  </>
+                ) : (
+                  <>This changeset has no operations yet.</>
+                )}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        {total === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            This changeset has no operations to publish.
-          </p>
-        ) : (
-          <div className="text-sm space-y-2 py-2">
-            <div className="font-medium">
-              {total} operation{total === 1 ? '' : 's'}:
+        {hasOps && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <StatCard
+                icon={<Plus className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                label="Added"
+                count={summary.added}
+                tone="add"
+              />
+              <StatCard
+                icon={<Pencil className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                label="Updated"
+                count={summary.updated}
+                tone="update"
+              />
+              <StatCard
+                icon={<Minus className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                label="Removed"
+                count={summary.removed}
+                tone="remove"
+              />
             </div>
-            <ul className="space-y-1 pl-4 list-disc text-muted-foreground">
-              {summary.insertWidget > 0 && (
-                <li>
-                  <span className="text-foreground">{summary.insertWidget}</span>{' '}
-                  widget{summary.insertWidget === 1 ? '' : 's'} added
-                </li>
-              )}
-              {summary.updateWidget > 0 && (
-                <li>
-                  <span className="text-foreground">{summary.updateWidget}</span>{' '}
-                  widget setting{summary.updateWidget === 1 ? '' : 's'} updated
-                </li>
-              )}
-              {summary.deleteWidget > 0 && (
-                <li>
-                  <span className="text-foreground">{summary.deleteWidget}</span>{' '}
-                  widget{summary.deleteWidget === 1 ? '' : 's'} removed
-                </li>
-              )}
-              {summary.insertPlacement > 0 && (
-                <li>
-                  <span className="text-foreground">{summary.insertPlacement}</span>{' '}
-                  placement{summary.insertPlacement === 1 ? '' : 's'} added
-                </li>
-              )}
-              {summary.updatePlacement > 0 && (
-                <li>
-                  <span className="text-foreground">{summary.updatePlacement}</span>{' '}
-                  placement{summary.updatePlacement === 1 ? '' : 's'} updated
-                </li>
-              )}
-              {summary.deletePlacement > 0 && (
-                <li>
-                  <span className="text-foreground">{summary.deletePlacement}</span>{' '}
-                  placement{summary.deletePlacement === 1 ? '' : 's'} removed
-                </li>
-              )}
-            </ul>
+
+            {summary.routes.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-divider/60 bg-muted/30 px-3 py-2.5">
+                <Layers
+                  className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 text-xs">
+                  <div className="font-medium text-foreground">
+                    Affects {summary.routes.length} page
+                    {summary.routes.length === 1 ? '' : 's'}
+                  </div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    {summary.routes
+                      .slice(0, 4)
+                      .map((r) => humanizeRoute(r.id))
+                      .join(', ')}
+                    {summary.routes.length > 4 && (
+                      <span> +{summary.routes.length - 4} more</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-2 rounded-md border border-amber-200/70 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+              <AlertTriangle
+                className="mt-0.5 h-4 w-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span>
+                <strong className="font-semibold">Heads up — </strong>
+                publishing is immediate and can’t be undone from this screen. To
+                stage instead, cancel and choose “Schedule a rollout”.
+              </span>
+            </div>
           </div>
         )}
 
         <DialogFooter>
-          <ButtonGroup>
-            <Button variant="ghost" onClick={onClose} disabled={isBusy}>
-              Cancel
-            </Button>
-            <Button onClick={onConfirm} disabled={isBusy || total === 0}>
-              {isBusy ? 'Publishing…' : 'Publish'}
-            </Button>
-          </ButtonGroup>
+          <Button variant="ghost" onClick={onClose} disabled={isBusy}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={isBusy || !hasOps}
+            className="gap-1.5"
+          >
+            {isBusy ? (
+              <>Publishing…</>
+            ) : (
+              <>
+                Publish now
+                <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

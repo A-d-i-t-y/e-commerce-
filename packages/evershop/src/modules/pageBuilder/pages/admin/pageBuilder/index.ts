@@ -32,8 +32,7 @@ export default (
       !r.isApi &&
       !r.isAdmin &&
       r.editable === true &&
-      typeof r.path === 'string' &&
-      !r.path.includes(':')
+      typeof r.path === 'string'
   );
   // Prefer homepage when available — that's the merchandiser's default
   // entry point; the design's session picker also defaults there.
