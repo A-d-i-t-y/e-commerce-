@@ -18,6 +18,7 @@ const line = (width: string, top: number): React.CSSProperties => ({
 export default function TextBlockPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-text-block__preview"
       style={{
         position: 'relative',
         background: '#ffffff',

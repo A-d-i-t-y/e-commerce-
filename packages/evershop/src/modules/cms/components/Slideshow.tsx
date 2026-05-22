@@ -136,7 +136,7 @@ function SlideOverlay({
     return (
       <div
         aria-hidden="true"
-        className={`absolute inset-0 pointer-events-none ${TINT_BG.gradient}`}
+        className={`evershop-slideshow__overlay-tint absolute inset-0 pointer-events-none ${TINT_BG.gradient}`}
         style={{ opacity: clamped }}
       />
     );
@@ -144,7 +144,7 @@ function SlideOverlay({
   return (
     <div
       aria-hidden="true"
-      className={`absolute inset-0 pointer-events-none ${TINT_BG[tint]}`}
+      className={`evershop-slideshow__overlay-tint absolute inset-0 pointer-events-none ${TINT_BG[tint]}`}
       style={{ opacity: clamped }}
     />
   );
@@ -170,7 +170,7 @@ function ButtonInline({
   return (
     <a
       href={link}
-      className={buttonVariants({ variant, size: 'lg' })}
+      className={`evershop-slideshow__cta ${buttonVariants({ variant, size: 'lg' })}`}
       onClick={(e) => {
         // Inline edit needs to capture clicks on the contenteditable child
         // before the anchor's navigation fires.
@@ -485,7 +485,7 @@ export default function Slideshow({
     return null;
   }
 
-  const containerClass = ['slideshow-widget', 'relative', 'w-full'].join(' ');
+  const containerClass = ['evershop-slideshow', 'slideshow-widget', 'relative', 'w-full'].join(' ');
 
   return (
     <div className={containerClass}>
@@ -521,7 +521,7 @@ export default function Slideshow({
           // navigate.
           const inner = (
             <div
-              className={`relative w-full overflow-hidden ${aspectClass}`}
+              className={`evershop-slideshow__view relative w-full overflow-hidden ${aspectClass}`}
               onClick={(e) => {
                 if (
                   wholeSlideHref &&
@@ -545,6 +545,7 @@ export default function Slideshow({
                     alt={slide.headline || 'Slideshow image'}
                     width={slide.width || 1920}
                     height={slide.height || 0}
+                    className="evershop-slideshow__image"
                     style={{
                       objectFit: 'cover',
                       width: '100%',
@@ -561,6 +562,7 @@ export default function Slideshow({
                   alt={slide.headline || 'Slideshow image'}
                   width={slide.width || 1920}
                   height={slide.height || 0}
+                  className="evershop-slideshow__image"
                   style={{
                     objectFit: 'cover',
                     width: '100%',
@@ -580,16 +582,16 @@ export default function Slideshow({
                 hasPrimary ||
                 hasSecondary) && (
                 <div
-                  className={`absolute inset-0 z-10 flex flex-col p-4 md:p-8 ${posClasses.box}`}
+                  className={`evershop-slideshow__overlay absolute inset-0 z-10 flex flex-col p-4 md:p-8 ${posClasses.box}`}
                 >
                   <div
-                    className={`p-4 md:p-8 rounded-lg max-w-3xl ${posClasses.text}`}
+                    className={`evershop-slideshow__content p-4 md:p-8 rounded-lg max-w-3xl ${posClasses.text}`}
                   >
                     {slide.eyebrow && (
                       <Editable
                         as="span"
                         fieldPath={`settings.slides.${idx}.eyebrow`}
-                        className="inline-block uppercase tracking-widest text-xs md:text-sm text-white/90 font-semibold mb-2 drop-shadow"
+                        className="evershop-slideshow__eyebrow inline-block uppercase tracking-widest text-xs md:text-sm text-white/90 font-semibold mb-2 drop-shadow"
                       >
                         {slide.eyebrow}
                       </Editable>
@@ -598,7 +600,7 @@ export default function Slideshow({
                       <Editable
                         as="h2"
                         fieldPath={`settings.slides.${idx}.headline`}
-                        className="text-white text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 drop-shadow-lg"
+                        className="evershop-slideshow__heading text-white text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 drop-shadow-lg"
                       >
                         {slide.headline}
                       </Editable>
@@ -608,14 +610,14 @@ export default function Slideshow({
                         as="p"
                         fieldPath={`settings.slides.${idx}.subText`}
                         multiline
-                        className="text-white text-sm md:text-base lg:text-lg mb-4 md:mb-8 max-w-2xl drop-shadow-md"
+                        className="evershop-slideshow__subtext text-white text-sm md:text-base lg:text-lg mb-4 md:mb-8 max-w-2xl drop-shadow-md"
                       >
                         {slide.subText}
                       </Editable>
                     )}
                     {(hasPrimary || hasSecondary) && (
                       <div
-                        className={`flex flex-wrap gap-3 items-center ${
+                        className={`evershop-slideshow__ctas flex flex-wrap gap-3 items-center ${
                           posClasses.text === 'text-right'
                             ? 'justify-end'
                             : posClasses.text === 'text-center'
@@ -649,11 +651,11 @@ export default function Slideshow({
 
           const wrapperKey = slide.id || `slide-${idx}`;
           return (
-            <div key={wrapperKey} className="slide__wrapper !block">
+            <div key={wrapperKey} className="evershop-slideshow__slide slide__wrapper !block">
               {wholeSlideHref ? (
                 <a
                   href={wholeSlideHref}
-                  className="block"
+                  className="evershop-slideshow__slide-link block"
                   aria-label={slide.headline || `Slide ${idx + 1}`}
                 >
                   {inner}

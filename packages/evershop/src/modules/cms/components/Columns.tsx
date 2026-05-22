@@ -30,20 +30,21 @@ interface ColumnsProps {
   };
 }
 
-// Anchor → flex classes. Mirrors the slideshow widget's mapping. The Area
-// inside each column already takes the full width when needed; the
-// alignment kicks in for shorter content (e.g. a single text block sitting
-// inside a tall column band).
+// Anchor → flex classes. Only `justify-*` (vertical / main axis) varies;
+// `text-*` handles horizontal alignment of inner content. Cross-axis is
+// left as the default `stretch` so child widgets keep their full column
+// width — earlier `items-center` etc. collapsed widgets to content width,
+// hiding empty / inline children behind their drop zones.
 const ANCHOR_CLASS: Record<ColumnAnchor, string> = {
-  tl: 'justify-start items-start text-left',
-  tc: 'justify-start items-center text-center',
-  tr: 'justify-start items-end text-right',
-  ml: 'justify-center items-start text-left',
-  mc: 'justify-center items-center text-center',
-  mr: 'justify-center items-end text-right',
-  bl: 'justify-end items-start text-left',
-  bc: 'justify-end items-center text-center',
-  br: 'justify-end items-end text-right'
+  tl: 'justify-start text-left',
+  tc: 'justify-start text-center',
+  tr: 'justify-start text-right',
+  ml: 'justify-center text-left',
+  mc: 'justify-center text-center',
+  mr: 'justify-center text-right',
+  bl: 'justify-end text-left',
+  bc: 'justify-end text-center',
+  br: 'justify-end text-right'
 };
 
 // Responsive padding presets — fixed string literals so Tailwind's JIT
@@ -175,7 +176,7 @@ export default function Columns({
 
 export const query = `
   query Query(
-    $columnCount: Float
+    $columnCount: Int
     $gap: Float
     $ratio: String
     $background: String

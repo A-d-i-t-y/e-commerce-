@@ -61,7 +61,7 @@ function Segmented<T extends string | number>({
 }) {
   return (
     <div
-      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-0.5"
+      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-1"
       role="radiogroup"
     >
       {options.map((opt) => {
@@ -208,7 +208,7 @@ function AnchorPicker({
     'br'
   ];
   return (
-    <div className="inline-grid grid-cols-3 gap-1 rounded-md border border-divider bg-muted/30 p-1.5">
+    <div className="inline-grid grid-cols-3 gap-1 rounded-md border border-divider bg-muted/30 p-2">
       {cells.map((c) => {
         const active = value === c;
         return (
@@ -719,7 +719,7 @@ export default function SlideshowSetting({
               type="text"
               {...register(`settings.slides.${idx}.eyebrow` as any)}
               placeholder="e.g. New collection"
-              className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </Field>
           <Field label="Headline">
@@ -727,7 +727,7 @@ export default function SlideshowSetting({
               type="text"
               {...register(`settings.slides.${idx}.headline` as any)}
               placeholder="e.g. Summer Sale"
-              className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </Field>
           <Field label="Sub text">
@@ -735,7 +735,7 @@ export default function SlideshowSetting({
               {...register(`settings.slides.${idx}.subText` as any)}
               placeholder="Check out our latest products with special discounts."
               rows={2}
-              className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-vertical"
+              className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-vertical"
             />
           </Field>
 
@@ -749,7 +749,7 @@ export default function SlideshowSetting({
                 type="text"
                 {...register(`settings.slides.${idx}.buttonText` as any)}
                 placeholder="Shop now"
-                className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </Field>
             <Field label="Link">
@@ -757,7 +757,7 @@ export default function SlideshowSetting({
                 type="text"
                 {...register(`settings.slides.${idx}.buttonLink` as any)}
                 placeholder="/c/sale"
-                className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </Field>
             <Field label="Style">
@@ -799,7 +799,7 @@ export default function SlideshowSetting({
                     type="text"
                     {...register(`settings.slides.${idx}.button2Text` as any)}
                     placeholder="Learn more"
-                    className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </Field>
                 <Field label="Link">
@@ -807,7 +807,7 @@ export default function SlideshowSetting({
                     type="text"
                     {...register(`settings.slides.${idx}.button2Link` as any)}
                     placeholder="/about"
-                    className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </Field>
                 <Field label="Style">

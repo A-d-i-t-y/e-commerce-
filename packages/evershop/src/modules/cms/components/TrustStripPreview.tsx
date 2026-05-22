@@ -7,8 +7,9 @@ import React from 'react';
 export default function TrustStripPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-trust-strip__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
@@ -19,11 +20,12 @@ export default function TrustStripPreview(): React.ReactElement {
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}
+          className="evershop-trust-strip__preview-item"
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
             fontFamily:
               'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             fontSize: 9,

@@ -16,8 +16,31 @@ interface TextBlockSettingProps {
 export default function TextBlockSetting({
   textWidget
 }: TextBlockSettingProps) {
-  const { text = '', className = '' } = textWidget ?? {};
-  const { register, watch, setValue } = useScopedFormContext();
+  const { text: propText, className = '' } = textWidget ?? {};
+  const { register, watch, setValue, getValues } = useScopedFormContext();
+
+  // Capture the initial text ONCE at mount.
+  //
+  // In the page-builder drawer `textWidget` is undefined (the component
+  // mounts via <Area id="widget_setting_form"> without GraphQL props). The
+  // form state already has the widget's existing settings, populated by the
+  // page-builder Editor — we read it via `getValues` to seed the editor.
+  //
+  // An earlier attempt used `watch('settings.text')`, but the
+  // `temp_editor_text → settings.text` sync below runs on every keystroke,
+  // which would re-render this component on every keystroke and pass a
+  // fresh `value` reference to <Editor>. <Editor>'s `useState(value.map...)`
+  // only reads `value` once, but the cascading re-renders disrupted the
+  // page-builder auto-save chain so the preview iframe only refreshed when
+  // the drawer was closed (not while typing). A snapshot via `useState`
+  // keeps the editor's input stable across edits and lets auto-save
+  // propagate normally.
+  const [initialText] = React.useState<Row[] | string>(() => {
+    if (propText !== undefined) return propText;
+    const fromForm = getValues('settings.text') as Row[] | string | undefined;
+    return fromForm ?? '';
+  });
+  const text: Row[] | string = initialText;
 
   const editorValue = watch('temp_editor_text');
 

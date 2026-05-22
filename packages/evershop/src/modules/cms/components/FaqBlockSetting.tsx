@@ -219,7 +219,7 @@ export default function FaqBlockSetting({ faqBlockWidget }: FaqBlockSettingProps
           renderHeader={({ item }) => {
             if (item.type === 'prose') {
               return (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-2">
                   <FileText className="h-3 w-3" /> Prose
                 </span>
               );
@@ -311,7 +311,7 @@ export default function FaqBlockSetting({ faqBlockWidget }: FaqBlockSettingProps
             );
           }}
         />
-        <div className="mt-3 flex gap-1.5">
+        <div className="mt-3 flex gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -319,7 +319,7 @@ export default function FaqBlockSetting({ faqBlockWidget }: FaqBlockSettingProps
             onClick={addProse}
             className="flex-1 justify-center"
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            <Plus className="mr-2 h-3.5 w-3.5" />
             Add prose
           </Button>
           <Button
@@ -329,7 +329,7 @@ export default function FaqBlockSetting({ faqBlockWidget }: FaqBlockSettingProps
             onClick={addFaq}
             className="flex-1 justify-center"
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            <Plus className="mr-2 h-3.5 w-3.5" />
             Add FAQ group
           </Button>
         </div>

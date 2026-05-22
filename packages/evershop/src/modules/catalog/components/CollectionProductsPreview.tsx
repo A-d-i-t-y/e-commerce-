@@ -9,26 +9,28 @@ const TILE_COLORS = ['#d8dfd0', '#c08a6f', '#efe6d4', '#9ca38a'];
 export default function CollectionProductsPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-collection-products__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         height: 130,
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 6
+        gap: 8
       }}
     >
       {TILE_COLORS.map((color, i) => (
         <div
           key={i}
+          className="evershop-collection-products__preview-tile"
           style={{
             background: color,
             borderRadius: 3,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'flex-end',
-            padding: 5,
-            gap: 3
+            padding: 4,
+            gap: 4
           }}
         >
           <span

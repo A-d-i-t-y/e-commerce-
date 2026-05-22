@@ -1,36 +1,47 @@
- 
+
 import { drawerInputClass } from '@components/common/page-builder/drawer/index.js';
 import { CategoryPicker } from '@components/common/page-builder/pickers/CategoryPicker.js';
-import { CollectionPicker } from '@components/common/page-builder/pickers/CollectionPicker.js';
 import { PagePicker } from '@components/common/page-builder/pickers/PagePicker.js';
 import { ProductPicker } from '@components/common/page-builder/pickers/ProductPicker.js';
+import { CatalogUrn, CmsUrn, UrnService } from '@evershop/evershop/lib/urn';
 import React, { useState } from 'react';
 
 /**
  * Composite "where does this link go?" picker for widget CTAs and tile
- * links. Tabs: Page · Category · Product · Collection · Custom URL. Each
- * tab presents its own search-and-pick UI; selecting from any tab fires
- * `onChange` with the resolved URL string. Custom URL is a free-text
- * input.
+ * links. Tabs: Page · Category · Product · Collection · Custom URL.
  *
- * `kind` is an admin-only hint that helps the picker re-open on the tab
- * the merchant last used. Storage is up to the caller — most callers
- * store the URL alone (kind is rebuilt on focus). Storing the kind too
- * is a nice-to-have for re-edit ergonomics.
+ * Storage format:
+ *  - Internal entities → URN: `urn:evershop:<kind>:<id>` (id is uuid
+ *    for page/category/product, code for collection). The storefront
+ *    resolves URNs at request time via per-request batched loaders,
+ *    so the rendered link reflects the entity's *current* URL — if a
+ *    category is renamed, every widget linking to it follows along.
+ *  - Custom URL → plain string (unchanged passthrough).
  *
- * The `LinkPicker` does NOT resolve URLs at runtime — it just emits a
- * string. Linking to a category by uuid would require runtime resolution;
- * we're explicitly choosing to bake the URL at edit time so the storefront
- * render is a plain anchor without an extra query.
+ * `kind` is an admin-only hint helping the picker re-open on the tab
+ * the merchant last used; the URN encodes it too, so kind is derivable
+ * on re-edit even when not stored separately.
  */
 
-export type LinkKind = 'page' | 'category' | 'product' | 'collection' | 'custom';
+type ParsedLinkUrn = { kind: Exclude<LinkKind, 'custom'>; id: string };
+
+// Map a URN's (service, type) to the LinkPicker tab kind. Returns null
+// for non-link URNs (e.g. widget_instance) so they fall back to custom-URL.
+function parseUrn(value: string | undefined | null): ParsedLinkUrn | null {
+  if (!value || !UrnService.isValid(value)) return null;
+  const { service, type, uuid } = UrnService.parse(value);
+  if (service === 'catalog' && type === 'product') return { kind: 'product', id: uuid };
+  if (service === 'catalog' && type === 'category') return { kind: 'category', id: uuid };
+  if (service === 'cms' && type === 'page') return { kind: 'page', id: uuid };
+  return null;
+}
+
+export type LinkKind = 'page' | 'category' | 'product' | 'custom';
 
 const TABS: { value: LinkKind; label: string }[] = [
   { value: 'page', label: 'Page' },
   { value: 'category', label: 'Category' },
   { value: 'product', label: 'Product' },
-  { value: 'collection', label: 'Collection' },
   { value: 'custom', label: 'Custom URL' }
 ];
 
@@ -53,8 +64,12 @@ export function LinkPicker({
   const visibleTabs = allowedKinds
     ? TABS.filter((t) => allowedKinds.includes(t.value))
     : TABS;
+  // If the stored value is a URN, the kind is derivable from it — open
+  // on that tab regardless of the explicit `initialKind` hint.
+  const parsed = parseUrn(value);
+  const effectiveInitial: LinkKind = parsed ? parsed.kind : initialKind;
   const [tab, setTab] = useState<LinkKind>(
-    visibleTabs.find((t) => t.value === initialKind)?.value ??
+    visibleTabs.find((t) => t.value === effectiveInitial)?.value ??
       visibleTabs[0].value
   );
 
@@ -82,31 +97,36 @@ export function LinkPicker({
 
       {tab === 'page' && (
         <PagePicker
-          selectedUrl={value}
-          onPick={(r) => onChange({ url: r.url, kind: 'page', label: r.name })}
+          selectedUuid={parsed?.kind === 'page' ? parsed.id : null}
+          selectedUrl={parsed ? null : value || null}
+          onPick={(r) =>
+            onChange({ url: CmsUrn.page(r.uuid), kind: 'page', label: r.name })
+          }
         />
       )}
       {tab === 'category' && (
         <CategoryPicker
-          selectedUrl={value}
+          selectedUuid={parsed?.kind === 'category' ? parsed.id : null}
+          selectedUrl={parsed ? null : value || null}
           onPick={(r) =>
-            onChange({ url: r.url, kind: 'category', label: r.name })
+            onChange({
+              url: CatalogUrn.category(r.uuid),
+              kind: 'category',
+              label: r.name
+            })
           }
         />
       )}
       {tab === 'product' && (
         <ProductPicker
-          selectedUrl={value}
+          selectedUuid={parsed?.kind === 'product' ? parsed.id : null}
+          selectedUrl={parsed ? null : value || null}
           onPick={(r) =>
-            onChange({ url: r.url, kind: 'product', label: r.name })
-          }
-        />
-      )}
-      {tab === 'collection' && (
-        <CollectionPicker
-          selectedCode={value}
-          onPick={(r) =>
-            onChange({ url: r.code, kind: 'collection', label: r.name })
+            onChange({
+              url: CatalogUrn.product(r.uuid),
+              kind: 'product',
+              label: r.name
+            })
           }
         />
       )}
@@ -114,7 +134,7 @@ export function LinkPicker({
         <div className="space-y-1.5">
           <input
             type="text"
-            value={value || ''}
+            value={parsed ? '' : value || ''}
             onChange={(e) =>
               onChange({ url: e.target.value, kind: 'custom' })
             }

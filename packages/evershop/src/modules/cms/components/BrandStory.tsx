@@ -1,5 +1,5 @@
- 
 import { Image } from '@components/common/Image.js';
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 import { renderInlineMarkdown } from '../../../lib/util/markdownInline.js';
 
@@ -57,20 +57,28 @@ function Copy({
 }) {
   const align = centered ? 'text-center' : 'text-left';
   return (
-    <div className={`flex flex-col gap-4 ${align}`}>
+    <div className={`evershop-brand-story__copy flex flex-col gap-4 ${align}`}>
       {eyebrow && (
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-foreground/70">
+        <Editable
+          as="div"
+          fieldPath="settings.eyebrow"
+          className="evershop-brand-story__eyebrow text-[11px] font-semibold uppercase tracking-widest text-foreground/70"
+        >
           {eyebrow}
-        </div>
+        </Editable>
       )}
-      <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+      <Editable
+        as="h2"
+        fieldPath="settings.heading"
+        className="evershop-brand-story__heading text-2xl font-semibold tracking-tight md:text-3xl"
+      >
         {heading}
-      </h2>
-      <p className="text-sm text-foreground/80 md:text-base">
+      </Editable>
+      <p className="evershop-brand-story__body text-sm text-foreground/80 md:text-base">
         {renderInlineMarkdown(body)}
       </p>
       {bodySecondary && (
-        <p className="text-sm text-foreground/80 md:text-base">
+        <p className="evershop-brand-story__body evershop-brand-story__body--secondary text-sm text-foreground/80 md:text-base">
           {renderInlineMarkdown(bodySecondary)}
         </p>
       )}
@@ -79,7 +87,7 @@ function Copy({
           href={link.url}
           target={link.newTab ? '_blank' : undefined}
           rel={link.newTab ? 'noopener noreferrer' : undefined}
-          className="text-sm font-medium underline underline-offset-2 hover:opacity-80"
+          className="evershop-brand-story__cta text-sm font-medium underline underline-offset-2 hover:opacity-80"
         >
           {link.label} <span aria-hidden="true">→</span>
           {/* Visually-hidden suffix so screen-reader users hear the context. */}
@@ -112,32 +120,42 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
 
   if (layout === 'pull-quote') {
     return (
-      <div className="evershop-brand-story mx-auto max-w-[960px] px-4 py-12">
+      <div className="evershop-brand-story evershop-brand-story--pull-quote mx-auto max-w-[960px] py-6 md:py-10">
         {eyebrow && (
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-foreground/70">
+          <Editable
+            as="div"
+            fieldPath="settings.eyebrow"
+            className="evershop-brand-story__eyebrow mb-2 text-[11px] font-semibold uppercase tracking-widest text-foreground/70"
+          >
             {eyebrow}
-          </div>
+          </Editable>
         )}
-        <h2 className="mb-6 text-base font-semibold tracking-tight text-foreground/70">
+        <Editable
+          as="h2"
+          fieldPath="settings.heading"
+          className="evershop-brand-story__heading mb-6 text-base font-semibold tracking-tight text-foreground/70"
+        >
           {heading}
-        </h2>
+        </Editable>
         {pullQuote && (
-          <blockquote className="relative pl-8 text-2xl font-light leading-relaxed text-foreground md:text-4xl">
+          <blockquote className="evershop-brand-story__pull-quote relative pl-8 text-2xl font-light leading-relaxed text-foreground md:text-4xl">
             <span
               aria-hidden="true"
-              className="absolute left-0 top-0 -translate-y-2 text-5xl text-foreground/30"
+              className="evershop-brand-story__quote-mark absolute left-0 top-0 -translate-y-2 text-5xl text-foreground/30"
             >
               “
             </span>
-            {pullQuote}
+            <Editable as="span" fieldPath="settings.pullQuote" multiline>
+              {pullQuote}
+            </Editable>
           </blockquote>
         )}
-        <div className="mt-6">
-          <p className="text-sm text-foreground/80 md:text-base">
+        <div className="evershop-brand-story__copy mt-6">
+          <p className="evershop-brand-story__body text-sm text-foreground/80 md:text-base">
             {renderInlineMarkdown(body)}
           </p>
           {bodySecondary && (
-            <p className="mt-3 text-sm text-foreground/80 md:text-base">
+            <p className="evershop-brand-story__body evershop-brand-story__body--secondary mt-3 text-sm text-foreground/80 md:text-base">
               {renderInlineMarkdown(bodySecondary)}
             </p>
           )}
@@ -146,7 +164,7 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
               href={link.url}
               target={link.newTab ? '_blank' : undefined}
               rel={link.newTab ? 'noopener noreferrer' : undefined}
-              className="mt-4 inline-block text-sm font-medium underline underline-offset-2 hover:opacity-80"
+              className="evershop-brand-story__cta mt-4 inline-block text-sm font-medium underline underline-offset-2 hover:opacity-80"
             >
               {link.label} <span aria-hidden="true">→</span>
             </a>
@@ -158,9 +176,9 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
 
   if (layout === 'centered') {
     return (
-      <div className="evershop-brand-story mx-auto max-w-[720px] px-4 py-12">
+      <div className="evershop-brand-story evershop-brand-story--centered mx-auto max-w-[720px] py-6 md:py-10">
         {image && (
-          <div className="mx-auto mb-6 h-32 w-32 overflow-hidden rounded-full bg-muted/30">
+          <div className="evershop-brand-story__image-wrapper mx-auto mb-6 h-32 w-32 overflow-hidden rounded-full bg-muted/30">
             <Image
               src={image}
               alt={imageAlt || ''}
@@ -168,7 +186,7 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
               height={intrinsicHeight}
               objectFit="cover"
               sizes="128px"
-              className="h-full w-full"
+              className="evershop-brand-story__image h-full w-full"
               style={{ aspectRatio: 'auto' }}
             />
           </div>
@@ -202,10 +220,10 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
       : 'md:col-span-6';
 
   return (
-    <div className={`evershop-brand-story grid ${cols} gap-8 px-4 py-8`}>
+    <div className={`evershop-brand-story evershop-brand-story--${layout} grid ${cols} gap-8 py-6 md:py-10`}>
       {!reverse && (
         <>
-          <div className={`${imageSpan} order-1`}>
+          <div className={`evershop-brand-story__image-panel ${imageSpan} order-1`}>
             {image && (
               <Image
                 src={image}
@@ -214,14 +232,12 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
                 height={intrinsicHeight}
                 objectFit="cover"
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="h-full max-h-[600px] w-full"
+                className="evershop-brand-story__image h-full max-h-[600px] w-full"
                 style={{ aspectRatio: 'auto' }}
               />
             )}
           </div>
-          <div
-            className={`${copySpan} order-2 flex items-center md:order-2`}
-          >
+          <div className={`evershop-brand-story__copy-panel ${copySpan} order-2 flex items-center md:order-2`}>
             <Copy
               eyebrow={eyebrow}
               heading={heading}
@@ -234,7 +250,7 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
       )}
       {reverse && (
         <>
-          <div className={`${imageSpan} order-1 md:order-2`}>
+          <div className={`evershop-brand-story__image-panel ${imageSpan} order-1 md:order-2`}>
             {image && (
               <Image
                 src={image}
@@ -243,14 +259,12 @@ export default function BrandStory({ brandStoryWidget }: BrandStoryProps) {
                 height={intrinsicHeight}
                 objectFit="cover"
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="h-full max-h-[600px] w-full"
+                className="evershop-brand-story__image h-full max-h-[600px] w-full"
                 style={{ aspectRatio: 'auto' }}
               />
             )}
           </div>
-          <div
-            className={`${copySpan} order-2 flex items-center md:order-1`}
-          >
+          <div className={`evershop-brand-story__copy-panel ${copySpan} order-2 flex items-center md:order-1`}>
             <Copy
               eyebrow={eyebrow}
               heading={heading}

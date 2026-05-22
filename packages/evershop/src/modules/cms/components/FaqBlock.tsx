@@ -1,5 +1,6 @@
 import { Editor } from '@components/common/Editor.js';
 import { Row } from '@components/common/form/Editor.js';
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 import { renderInlineMarkdown } from '../../../lib/util/markdownInline.js';
 
@@ -92,17 +93,21 @@ export default function FaqBlock({ faqBlockWidget }: FaqBlockProps) {
   if (!Array.isArray(sections) || sections.length === 0) return null;
 
   return (
-    <div className={`evershop-faq-block mx-auto ${widthClass} px-4`}>
+    <div className={`evershop-faq-block mx-auto ${widthClass} py-6 md:py-10`}>
       {heading && (
-        <h2 className="mb-4 text-2xl font-semibold tracking-tight">
+        <Editable
+          as="h2"
+          fieldPath="settings.heading"
+          className="evershop-faq-block__heading mb-4 text-2xl font-semibold tracking-tight"
+        >
           {heading}
-        </h2>
+        </Editable>
       )}
-      <div className="space-y-6">
-        {sections.map((section) => {
+      <div className="evershop-faq-block__sections space-y-6">
+        {sections.map((section, sectionIdx) => {
           if (section.type === 'prose') {
             return (
-              <div key={section.id} className="prose max-w-none">
+              <div key={section.id} className="evershop-faq-block__section evershop-faq-block__section--prose prose max-w-none">
                 <Editor rows={normalizeProse(section.content)} />
               </div>
             );
@@ -112,28 +117,38 @@ export default function FaqBlock({ faqBlockWidget }: FaqBlockProps) {
               key={section.id}
               data-evershop-faq-group
               data-single-open={singleOpen ? 'true' : 'false'}
+              className="evershop-faq-block__section evershop-faq-block__section--faq"
             >
               {section.heading && (
-                <h3 className="mb-2 text-lg font-semibold">
+                <Editable
+                  as="h3"
+                  fieldPath={`settings.sections.${sectionIdx}.heading`}
+                  className="evershop-faq-block__subheading mb-2 text-lg font-semibold"
+                >
                   {section.heading}
-                </h3>
+                </Editable>
               )}
-              <div className="divide-y divide-divider rounded-md border border-divider">
-                {(section.items ?? []).map((item) => (
+              <div className="evershop-faq-block__cards divide-y divide-divider rounded-md border border-divider">
+                {(section.items ?? []).map((item, itemIdx) => (
                   <details
                     key={item.id}
-                    className="group px-3 py-3"
+                    className="evershop-faq-block__card group px-3 py-3"
                   >
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
-                      <span>{item.question}</span>
+                    <summary className="evershop-faq-block__question flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
+                      <Editable
+                        as="span"
+                        fieldPath={`settings.sections.${sectionIdx}.items.${itemIdx}.question`}
+                      >
+                        {item.question}
+                      </Editable>
                       <span
                         aria-hidden="true"
-                        className="text-xs text-muted-foreground transition-transform group-open:rotate-90"
+                        className="evershop-faq-block__chevron text-xs text-muted-foreground transition-transform group-open:rotate-90"
                       >
                         ▶
                       </span>
                     </summary>
-                    <div className="mt-2 text-sm text-foreground/80">
+                    <div className="evershop-faq-block__answer mt-2 text-sm text-foreground/80">
                       {renderInlineMarkdown(item.answer)}
                     </div>
                   </details>

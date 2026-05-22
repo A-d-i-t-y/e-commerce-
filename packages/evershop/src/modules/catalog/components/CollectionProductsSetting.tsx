@@ -1,4 +1,5 @@
 import Spinner from '@components/admin/Spinner.js';
+import { LinkPicker } from '@components/common/page-builder/pickers/LinkPicker.js';
 import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
 import {
   RadioGroup,
@@ -96,6 +97,8 @@ interface CollectionProductsSettingProps {
     countPerRow?: number;
     heading?: string | null;
     subText?: string | null;
+    viewAllLink?: string | null;
+    viewAllLabel?: string | null;
   };
 }
 
@@ -107,7 +110,9 @@ function CollectionProductsSetting({
     count = 0,
     countPerRow = undefined,
     heading = '',
-    subText = ''
+    subText = '',
+    viewAllLink = '',
+    viewAllLabel = ''
   } = collectionProductsWidget ?? {};
 
   const limit = 10;
@@ -123,6 +128,11 @@ function CollectionProductsSetting({
     typeof watchedCollection === 'string' && watchedCollection.length > 0
       ? watchedCollection
       : collection;
+
+  const viewAllLinkV =
+    (watch('settings.viewAllLink') as string) ?? viewAllLink ?? '';
+  const viewAllLabelV =
+    (watch('settings.viewAllLabel') as string) ?? viewAllLabel ?? '';
 
   const [result, reexecuteQuery] = useQuery({
     query: SearchQuery,
@@ -190,7 +200,7 @@ function CollectionProductsSetting({
               value={inputValue || ''}
               placeholder="Search collections…"
               onChange={(e) => setInputValue(e.target.value)}
-              className="w-full rounded-md border border-divider bg-card pl-7 pr-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded-md border border-divider bg-card pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </Field>
@@ -228,7 +238,7 @@ function CollectionProductsSetting({
                       return (
                         <li key={c.uuid}>
                           <label
-                            className={`flex cursor-pointer items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                            className={`flex cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors ${
                               active
                                 ? 'border-primary/40 bg-primary/5'
                                 : 'border-divider hover:bg-muted/40'
@@ -282,7 +292,7 @@ function CollectionProductsSetting({
             {...register('settings.heading')}
             defaultValue={heading ?? ''}
             placeholder={pickedCollectionName ?? 'Collection name'}
-            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
         <Field
@@ -294,9 +304,54 @@ function CollectionProductsSetting({
             defaultValue={subText ?? ''}
             placeholder="e.g. Hand-picked styles for the season."
             rows={2}
-            className="w-full resize-vertical rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full resize-vertical rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
+      </Section>
+
+      {/* View-all CTA — optional. Same shape as the per-row "View all"
+          link in the Collection stack widget. */}
+      <Section title="View all link">
+        <Field
+          label="Link"
+          hint="Optional. Hidden when empty. Pick a category, product, page, or paste a custom URL."
+        >
+          <LinkPicker
+            value={viewAllLinkV}
+            initialKind="category"
+            onChange={({ url }) =>
+              setValue('settings.viewAllLink', url || null, {
+                shouldDirty: true
+              })
+            }
+          />
+        </Field>
+        <Field
+          label="Label"
+          hint='Optional. Defaults to "View all →".'
+        >
+          <input
+            type="text"
+            value={viewAllLabelV}
+            onChange={(e) =>
+              setValue('settings.viewAllLabel', e.target.value || null, {
+                shouldDirty: true
+              })
+            }
+            placeholder="View all →"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </Field>
+        <input
+          type="hidden"
+          {...register('settings.viewAllLink')}
+          defaultValue={viewAllLink ?? ''}
+        />
+        <input
+          type="hidden"
+          {...register('settings.viewAllLabel')}
+          defaultValue={viewAllLabel ?? ''}
+        />
       </Section>
 
       {/* Layout */}
@@ -312,7 +367,7 @@ function CollectionProductsSetting({
             })}
             defaultValue={count || ''}
             placeholder="e.g. 8"
-            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
         <Field label="Products per row" hint="Grid columns (1–6 typical).">
@@ -326,7 +381,7 @@ function CollectionProductsSetting({
             })}
             defaultValue={countPerRow ?? ''}
             placeholder="e.g. 4"
-            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
       </Section>
@@ -343,6 +398,8 @@ export const query = `
     $countPerRow: Int
     $heading: String
     $subText: String
+    $viewAllLink: String
+    $viewAllLabel: String
   ) {
     collectionProductsWidget(
       collection: $collection
@@ -350,12 +407,16 @@ export const query = `
       countPerRow: $countPerRow
       heading: $heading
       subText: $subText
+      viewAllLink: $viewAllLink
+      viewAllLabel: $viewAllLabel
     ) {
       collection
       count
       countPerRow
       heading
       subText
+      viewAllLink
+      viewAllLabel
     }
   }
 `;
@@ -365,5 +426,7 @@ export const variables = `{
   count: getWidgetSetting("count"),
   countPerRow: getWidgetSetting("countPerRow"),
   heading: getWidgetSetting("heading"),
-  subText: getWidgetSetting("subText")
+  subText: getWidgetSetting("subText"),
+  viewAllLink: getWidgetSetting("viewAllLink"),
+  viewAllLabel: getWidgetSetting("viewAllLabel")
 }`;

@@ -311,7 +311,7 @@ export default function TieredCategoriesSetting({
 export const query = `
   query Query(
     $groups: JSON
-    $columns: Float
+    $columns: Int
     $imageAspect: String
     $showParentLink: Boolean
   ) {

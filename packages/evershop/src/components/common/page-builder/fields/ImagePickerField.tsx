@@ -116,7 +116,7 @@ export function ImagePickerField({
               setOpen(true);
             }}
           >
-            <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+            <ImagePlus className="mr-2 h-3.5 w-3.5" />
             {value ? replaceLabel : selectLabel}
           </Button>
           {value && (
@@ -171,7 +171,7 @@ export function ImagePickerField({
             </div>
           )}
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           <Button
             variant="outline"
             size="sm"

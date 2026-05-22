@@ -4,12 +4,13 @@ import React from 'react';
 export default function ProductHeroPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-product-hero__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
-        gap: 10,
+        gap: 8,
         height: 130
       }}
     >
@@ -44,7 +45,7 @@ export default function ProductHeroPreview(): React.ReactElement {
           style={{
             marginTop: 5,
             display: 'inline-block',
-            padding: '4px 10px',
+            padding: '4px 12px',
             background: '#2d2d2d',
             color: '#ffffff',
             borderRadius: 3,

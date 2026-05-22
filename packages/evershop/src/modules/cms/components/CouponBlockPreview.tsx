@@ -6,8 +6,9 @@ import React from 'react';
 export default function CouponBlockPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-coupon-block__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'flex',
         alignItems: 'center',
@@ -19,7 +20,7 @@ export default function CouponBlockPreview(): React.ReactElement {
         style={{
           border: '1px dashed #9b8e78',
           borderRadius: 8,
-          padding: '14px 18px',
+          padding: '16px 20px',
           textAlign: 'center',
           fontFamily:
             'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -45,14 +46,14 @@ export default function CouponBlockPreview(): React.ReactElement {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
             fontSize: 9,
             marginTop: 4
           }}
         >
           <span
             style={{
-              padding: '3px 8px',
+              padding: '4px 8px',
               border: '1px solid #2d2d2d',
               borderRadius: 4,
               fontWeight: 600
@@ -62,7 +63,7 @@ export default function CouponBlockPreview(): React.ReactElement {
           </span>
           <span
             style={{
-              padding: '3px 8px',
+              padding: '4px 8px',
               border: '1px solid #2d2d2d',
               borderRadius: 4
             }}

@@ -18,7 +18,6 @@ type CollectionSpotlightWidget {
   heading: String!
   body: String
   previewCount: Int!
-  showPrice: Boolean!
   previewProducts: [Product!]!
   totalProducts: Int!
   collectionName: String
@@ -35,7 +34,6 @@ extend type Query {
     eyebrow: String
     heading: String
     body: String
-    previewCount: Float
-    showPrice: Boolean
+    previewCount: Int
   ): CollectionSpotlightWidget
 }

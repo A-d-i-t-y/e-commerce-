@@ -6,7 +6,9 @@ import {
   validateSchema
 } from 'graphql';
 import { debug } from '../../../../lib/log/logger.js';
+import { pool } from '../../../../lib/postgres/connection.js';
 import { isDevelopmentMode } from '../../../../lib/util/isDevelopmentMode.js';
+import { createLinkLoaders } from '../../../../lib/widget/linkResolver.js';
 import adminSchema, { rebuildSchema } from '../../services/buildSchema.js';
 import storeFrontSchema, {
   rebuildStoreFrontSchema
@@ -60,6 +62,11 @@ export default async function graphql(request, response, next) {
           context.user = request.locals.user;
           // Add current customer to context
           context.customer = request.locals.customer;
+          // Per-request link URN loaders. Without these, widget resolvers
+          // that await `resolveLink(...)` get `undefined` loaders and
+          // return null for every URN — leaving CTA/link fields empty
+          // on SSR'd pages.
+          context.linkLoaders = createLinkLoaders(pool);
           const data = await execute({
             schema,
             contextValue: context,

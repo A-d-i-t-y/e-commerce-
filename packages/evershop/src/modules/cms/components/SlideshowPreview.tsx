@@ -7,13 +7,14 @@ import React from 'react';
 export default function SlideshowPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-slideshow__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         height: 130,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10
+        gap: 8
       }}
     >
       <div
@@ -54,7 +55,7 @@ export default function SlideshowPreview(): React.ReactElement {
         style={{
           display: 'flex',
           justifyContent: 'center',
-          gap: 6
+          gap: 8
         }}
       >
         {[0, 1, 2, 3].map((i) => (

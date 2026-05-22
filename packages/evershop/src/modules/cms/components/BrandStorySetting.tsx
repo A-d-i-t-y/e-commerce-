@@ -189,7 +189,7 @@ export default function BrandStorySetting({
               }
               rows={3}
               placeholder="A short, quotable line."
-              className="w-full resize-vertical rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full resize-vertical rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </Field>
         )}

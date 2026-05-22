@@ -7,7 +7,6 @@ import {
   MarkdownBodyField,
   Section,
   Segmented,
-  Slider,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import {
@@ -35,7 +34,6 @@ interface SplitFeatureSettingProps {
     cta?: CtaValue | null;
     verticalAlign?: SplitVerticalAlign;
     imageFit?: SplitImageFit;
-    minHeight?: number;
   };
 }
 
@@ -88,8 +86,7 @@ export default function SplitFeatureSetting({
     body,
     cta,
     verticalAlign,
-    imageFit,
-    minHeight
+    imageFit
   } = splitFeatureWidget ?? {};
 
   const { register, setValue, watch } = useScopedFormContext();
@@ -110,8 +107,6 @@ export default function SplitFeatureSetting({
       'center') as SplitVerticalAlign;
   const imageFitV =
     ((watch('settings.imageFit') as string) ?? imageFit ?? 'cover') as SplitImageFit;
-  const minHeightV =
-    (watch('settings.minHeight') as number) ?? minHeight ?? 480;
 
   return (
     <div className="space-y-3">
@@ -216,18 +211,6 @@ export default function SplitFeatureSetting({
             }
           />
         </Field>
-        <Field label="Minimum height">
-          <Slider
-            value={minHeightV}
-            min={200}
-            max={800}
-            step={40}
-            unit="px"
-            onCommit={(v) =>
-              setValue('settings.minHeight', v, { shouldDirty: true })
-            }
-          />
-        </Field>
       </Section>
 
       <Section title="Call to action">
@@ -287,11 +270,6 @@ export default function SplitFeatureSetting({
         {...register('settings.height', { valueAsNumber: true })}
         defaultValue={height ?? 0}
       />
-      <input
-        type="hidden"
-        {...register('settings.minHeight', { valueAsNumber: true })}
-        defaultValue={minHeight ?? 480}
-      />
     </div>
   );
 }
@@ -309,7 +287,6 @@ export const query = `
     $cta: JSON
     $verticalAlign: String
     $imageFit: String
-    $minHeight: Float
   ) {
     splitFeatureWidget(
       image: $image
@@ -323,7 +300,6 @@ export const query = `
       cta: $cta
       verticalAlign: $verticalAlign
       imageFit: $imageFit
-      minHeight: $minHeight
     ) {
       image
       imageAlt
@@ -336,7 +312,6 @@ export const query = `
       cta
       verticalAlign
       imageFit
-      minHeight
     }
   }
 `;
@@ -352,6 +327,5 @@ export const variables = `{
   body: getWidgetSetting("body"),
   cta: getWidgetSetting("cta"),
   verticalAlign: getWidgetSetting("verticalAlign", "center"),
-  imageFit: getWidgetSetting("imageFit", "cover"),
-  minHeight: getWidgetSetting("minHeight", 480)
+  imageFit: getWidgetSetting("imageFit", "cover")
 }`;

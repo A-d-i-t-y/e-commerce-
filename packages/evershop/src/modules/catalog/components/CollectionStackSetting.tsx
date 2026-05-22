@@ -145,7 +145,7 @@ export default function CollectionStackSetting({
               >
                 <LinkPicker
                   value={item.viewAllLink || ''}
-                  initialKind="collection"
+                  initialKind="category"
                   onChange={({ url }) =>
                     updateRow(index, {
                       viewAllLink: url || null
@@ -211,7 +211,7 @@ export default function CollectionStackSetting({
 export const query = `
   query Query(
     $collections: JSON
-    $productCount: Float
+    $productCount: Int
     $showPrice: Boolean
     $divider: Boolean
   ) {

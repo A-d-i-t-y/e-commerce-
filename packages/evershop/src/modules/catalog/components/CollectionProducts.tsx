@@ -18,11 +18,19 @@ interface CollectionProductsProps {
     countPerRow?: number;
     heading?: string | null;
     subText?: string | null;
+    viewAllLink?: string | null;
+    viewAllLabel?: string | null;
   };
 }
 export default function CollectionProducts({
   collection,
-  collectionProductsWidget: { countPerRow, heading, subText } = {}
+  collectionProductsWidget: {
+    countPerRow,
+    heading,
+    subText,
+    viewAllLink,
+    viewAllLabel
+  } = {}
 }: CollectionProductsProps) {
   // Defer iframe detection until after hydration so the first render is
   // SSR-stable (matches the production output of `null`).
@@ -35,36 +43,34 @@ export default function CollectionProducts({
     if (isClient && isInPageBuilderIframe()) {
       return (
         <div
-          className="pt-7 collection__products__widget"
+          className="evershop-collection-products evershop-collection-products--empty pt-7 collection__products__widget"
           data-evershop-pb-empty="collection_products"
         >
-          <div className="page-width">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                </svg>
-              </div>
-              <div className="text-sm font-medium text-gray-700">
-                Collection products
-              </div>
-              <div className="mt-1 text-xs text-gray-500">
-                Pick a collection in the settings panel to display its
-                products here.
-              </div>
+          <div className="evershop-collection-products__placeholder border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50">
+            <div className="evershop-collection-products__icon mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+            </div>
+            <div className="text-sm font-medium text-gray-700">
+              Collection products
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              Pick a collection in the settings panel to display its products
+              here.
             </div>
           </div>
         </div>
@@ -85,37 +91,48 @@ export default function CollectionProducts({
   const hasSubTextOverride = typeof subText === 'string' && subText.length > 0;
 
   return (
-    <div className="pt-7 collection__products__widget">
-      <div className="page-width">
+    <div className="evershop-collection-products collection__products__widget py-6 md:py-10">
+      <div className="evershop-collection-products__row-header mb-4 flex items-baseline justify-between gap-3">
         {displayHeading && (
           <Editable
-            as="h3"
+            as="h2"
             fieldPath="settings.heading"
-            className="text-center uppercase h5 tracking-widest"
+            className="evershop-collection-products__heading text-xl font-semibold tracking-tight md:text-2xl"
           >
             {displayHeading}
           </Editable>
         )}
-        <div className="flex justify-center">
+        {viewAllLink && (
+          <a
+            href={viewAllLink}
+            aria-label={`View all ${displayHeading || 'products'}`}
+            className="evershop-collection-products__view-all text-sm font-medium underline underline-offset-2 hover:opacity-80"
+          >
+            {viewAllLabel || 'View all →'}
+          </a>
+        )}
+      </div>
+      {(hasSubTextOverride || collection?.description) && (
+        <div className="evershop-collection-products__subheading-wrapper mb-4">
           {hasSubTextOverride ? (
             <Editable
               as="p"
               fieldPath="settings.subText"
               multiline
-              className="text-center max-w-2xl text-muted-foreground"
+              className="evershop-collection-products__subtext text-sm text-foreground/80 md:text-base"
             >
               {subText as string}
             </Editable>
-          ) : collection?.description ? (
-            <Editor rows={collection.description} />
-          ) : null}
+          ) : (
+            <Editor rows={collection!.description!} />
+          )}
         </div>
-        <div className="mt-3">
-          <ProductList
-            products={collection?.products?.items}
-            gridColumns={countPerRow}
-          />
-        </div>
+      )}
+      <div className="evershop-collection-products__items">
+        <ProductList
+          products={collection?.products?.items}
+          gridColumns={countPerRow}
+        />
       </div>
     </div>
   );
@@ -128,6 +145,8 @@ export const query = `
     $countPerRow: Int
     $heading: String
     $subText: String
+    $viewAllLink: String
+    $viewAllLabel: String
   ) {
     collection (code: $collection) {
       collectionId
@@ -145,10 +164,14 @@ export const query = `
       countPerRow: $countPerRow
       heading: $heading
       subText: $subText
+      viewAllLink: $viewAllLink
+      viewAllLabel: $viewAllLabel
     ) {
       countPerRow
       heading
       subText
+      viewAllLink
+      viewAllLabel
     }
   }
 `;
@@ -184,5 +207,7 @@ export const variables = `{
   count: getWidgetSetting("count"),
   countPerRow: getWidgetSetting("countPerRow", 4),
   heading: getWidgetSetting("heading"),
-  subText: getWidgetSetting("subText")
+  subText: getWidgetSetting("subText"),
+  viewAllLink: getWidgetSetting("viewAllLink"),
+  viewAllLabel: getWidgetSetting("viewAllLabel")
 }`;

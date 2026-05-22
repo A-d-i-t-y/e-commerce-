@@ -8,8 +8,9 @@ import React from 'react';
 export default function ColumnsPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-columns__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
@@ -20,6 +21,7 @@ export default function ColumnsPreview(): React.ReactElement {
       {[0, 1].map((i) => (
         <div
           key={i}
+          className="evershop-columns__preview-column"
           style={{
             border: '1px dashed #c9bca7',
             borderRadius: 4,

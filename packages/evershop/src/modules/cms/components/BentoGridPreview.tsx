@@ -4,17 +4,19 @@ import React from 'react';
 export default function BentoGridPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-bento-grid__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: '1.4fr 1fr 1fr',
         gridTemplateRows: '1fr 1fr',
-        gap: 6,
+        gap: 8,
         height: 130
       }}
     >
       <div
+        className="evershop-bento-grid__preview-tile evershop-bento-grid__preview-tile--hero"
         style={{
           gridColumn: '1 / 2',
           gridRow: '1 / 3',
@@ -23,7 +25,7 @@ export default function BentoGridPreview(): React.ReactElement {
           borderRadius: 4,
           display: 'flex',
           alignItems: 'flex-end',
-          padding: 6,
+          padding: 8,
           color: '#ffffff',
           fontFamily:
             'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -35,6 +37,7 @@ export default function BentoGridPreview(): React.ReactElement {
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}
+          className="evershop-bento-grid__preview-tile"
           style={{
             background: '#faf6ee',
             border: '1px solid #ebe5d8',

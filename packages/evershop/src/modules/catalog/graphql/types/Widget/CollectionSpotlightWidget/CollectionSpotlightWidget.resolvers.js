@@ -23,8 +23,7 @@ export default {
         eyebrow,
         heading,
         body,
-        previewCount,
-        showPrice
+        previewCount
       },
       { pool, user }
     ) => {
@@ -85,7 +84,6 @@ export default {
         heading: heading || (collectionName ?? ''),
         body: body || null,
         previewCount: allowedCount,
-        showPrice: showPrice !== undefined ? Boolean(showPrice) : true,
         previewProducts,
         totalProducts,
         collectionName

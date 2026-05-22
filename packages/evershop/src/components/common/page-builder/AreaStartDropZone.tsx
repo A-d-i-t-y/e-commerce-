@@ -62,11 +62,17 @@ export function AreaStartDropZone({
     zone.removeAttribute('data-evershop-pb-active');
     document.body.removeAttribute('data-evershop-pb-drag');
     const sortOrder = computeDropSortOrder(zone);
+    // Detect whether the drop landed in a global area (header, footer,
+    // anywhere wrapped by `<Area isGlobal>`). The admin uses this to
+    // default the new placement to `route='all'` so the widget shows on
+    // every page — same as a header/footer would intuitively behave.
+    const isGlobal = !!zone.closest('[data-evershop-global="true"]');
     postToParent({
       type: 'pb-drop',
       widgetType,
       area: areaId,
-      sortOrder
+      sortOrder,
+      isGlobal
     });
   };
 

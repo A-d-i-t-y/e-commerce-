@@ -209,7 +209,7 @@ export default () => {
       typeDefs: `
         type ColumnsSettings {
           columnCount: Int
-          gap: Int
+          gap: Float
           ratio: String
           background: String
           padding: String
@@ -321,9 +321,24 @@ export default () => {
       CONSTANTS.MODULESPATH,
       'cms/components/BannerPreview.js'
     ),
-    defaultSettings: {},
+    defaultSettings: {
+      // Defaults that produce a usable drop-state: image is empty (the
+      // storefront component renders an in-iframe placeholder), copy +
+      // CTAs are nullable so the storefront falls back to image-only when
+      // unset. Anchor + tint defaults are chosen so the *first* image pick
+      // looks reasonable without further config. Mobile image is also
+      // nullable — the storefront falls back to the desktop image when
+      // unset.
+      alignment: 'center',
+      contentPosition: 'mc',
+      overlayTint: 'none',
+      overlayOpacity: 0.3,
+      mobileImage: null,
+      mobileImageWidth: null,
+      mobileImageHeight: null
+    },
     name: 'Banner',
-    description: 'Image with call-to-action',
+    description: 'A single hero image with optional overlay copy and CTAs.',
     category: 'marketing',
     icon: 'Megaphone',
     enabled: true,
@@ -331,12 +346,29 @@ export default () => {
       type: 'object',
       additionalProperties: true,
       properties: {
-        alt: { type: 'string' },
-        src: { type: 'string' },
-        link: { type: 'string' },
-        width: { type: 'number' },
-        height: { type: 'number' },
-        alignment: { type: 'string' }
+        alt: { type: ['string', 'null'] } as any,
+        src: { type: ['string', 'null'] } as any,
+        link: { type: ['string', 'null'] } as any,
+        width: { type: ['number', 'null'] } as any,
+        height: { type: ['number', 'null'] } as any,
+        alignment: { type: 'string' },
+        eyebrow: { type: ['string', 'null'] } as any,
+        heading: { type: ['string', 'null'] } as any,
+        subText: { type: ['string', 'null'] } as any,
+        contentPosition: {
+          type: 'string',
+          enum: ['tl', 'tc', 'tr', 'ml', 'mc', 'mr', 'bl', 'bc', 'br']
+        },
+        overlayTint: {
+          type: 'string',
+          enum: ['none', 'dark', 'light', 'gradient']
+        },
+        overlayOpacity: { type: 'number', minimum: 0, maximum: 1 },
+        cta: { type: ['object', 'null'] } as any,
+        cta2: { type: ['object', 'null'] } as any,
+        mobileImage: { type: ['string', 'null'] } as any,
+        mobileImageWidth: { type: ['number', 'null'] } as any,
+        mobileImageHeight: { type: ['number', 'null'] } as any
       }
     },
     graphql: {
@@ -348,6 +380,17 @@ export default () => {
           width: Float
           height: Float
           alignment: String
+          eyebrow: String
+          heading: String
+          subText: String
+          contentPosition: String
+          overlayTint: String
+          overlayOpacity: Float
+          cta: JSON
+          cta2: JSON
+          mobileImage: String
+          mobileImageWidth: Float
+          mobileImageHeight: Float
         }
       `,
       settingsType: 'BannerSettings'
@@ -470,15 +513,15 @@ export default () => {
           layout: String
           image: String
           imageAlt: String
-          imageWidth: Int
-          imageHeight: Int
+          imageWidth: Float
+          imageHeight: Float
           eyebrow: String
           heading: String
           body: String
           bodySecondary: String
           link: JSON
           pullQuote: String
-          imageSize: Int
+          imageSize: Float
         }
       `,
       settingsType: 'BrandStorySettings'
@@ -760,10 +803,123 @@ export default () => {
         type BentoGridSettings {
           tiles: JSON
           gap: String
-          minHeight: Int
+          minHeight: Float
         }
       `,
       settingsType: 'BentoGridSettings'
+    }
+  });
+
+  registerWidget({
+    type: 'separator',
+    settingComponent: path.resolve(
+      CONSTANTS.MODULESPATH,
+      'cms/components/SeparatorSetting.js'
+    ),
+    component: path.resolve(
+      CONSTANTS.MODULESPATH,
+      'cms/components/Separator.js'
+    ),
+    previewComponent: path.resolve(
+      CONSTANTS.MODULESPATH,
+      'cms/components/SeparatorPreview.js'
+    ),
+    name: 'Separator',
+    description:
+      'Vertical spacing between widgets, with an optional divider line. Mobile scales down automatically.',
+    category: 'layout',
+    icon: 'Minus',
+    defaultSettings: {
+      size: 'md',
+      showLine: false,
+      lineColor: null
+    },
+    enabled: true,
+    schema: {
+      type: 'object',
+      additionalProperties: true,
+      properties: {
+        size: { type: 'string', enum: ['xs', 'sm', 'md', 'lg', 'xl'] },
+        showLine: { type: ['boolean', 'null'] } as any,
+        lineColor: { type: ['string', 'null'] } as any
+      }
+    },
+    graphql: {
+      typeDefs: `
+        type SeparatorSettings {
+          size: String
+          showLine: Boolean
+          lineColor: String
+        }
+      `,
+      settingsType: 'SeparatorSettings'
+    }
+  });
+
+  registerWidget({
+    type: 'section',
+    settingComponent: path.resolve(
+      CONSTANTS.MODULESPATH,
+      'cms/components/SectionSetting.js'
+    ),
+    component: path.resolve(
+      CONSTANTS.MODULESPATH,
+      'cms/components/Section.js'
+    ),
+    previewComponent: path.resolve(
+      CONSTANTS.MODULESPATH,
+      'cms/components/SectionPreview.js'
+    ),
+    name: 'Section',
+    description:
+      'Styled droppable band that wraps other widgets. Toggle between wide (edge-to-edge) and boxed (theme container).',
+    category: 'layout',
+    icon: 'LayoutTemplate',
+    defaultSettings: {
+      width: 'boxed',
+      padding: 'md',
+      background: null,
+      backgroundImage: null,
+      backgroundImageWidth: null,
+      backgroundImageHeight: null,
+      overlayTint: 'none',
+      overlayOpacity: 0.3
+    },
+    enabled: true,
+    schema: {
+      type: 'object',
+      additionalProperties: true,
+      properties: {
+        width: { type: 'string', enum: ['wide', 'boxed'] },
+        padding: {
+          type: 'string',
+          enum: ['none', 'sm', 'md', 'lg', 'xl']
+        },
+        background: { type: ['string', 'null'] } as any,
+        backgroundImage: { type: ['string', 'null'] } as any,
+        backgroundImageWidth: { type: ['integer', 'null'] } as any,
+        backgroundImageHeight: { type: ['integer', 'null'] } as any,
+        overlayTint: {
+          type: 'string',
+          enum: ['none', 'dark', 'light', 'gradient']
+        },
+        overlayOpacity: { type: 'number', minimum: 0, maximum: 1 }
+      }
+    },
+    graphql: {
+      typeDefs: `
+        type SectionSettings {
+          width: String
+          padding: String
+          background: String
+          backgroundImage: String
+          backgroundImageWidth: Int
+          backgroundImageHeight: Int
+          overlayTint: String
+          overlayOpacity: Float
+        }
+      `,
+      settingsType: 'SectionSettings'
     }
   });
 
@@ -803,8 +959,7 @@ export default () => {
         style: 'primary'
       },
       verticalAlign: 'center',
-      imageFit: 'cover',
-      minHeight: 480
+      imageFit: 'cover'
     },
     enabled: true,
     schema: {
@@ -824,8 +979,7 @@ export default () => {
         body: { type: ['string', 'null'] } as any,
         cta: { type: ['object', 'null'] } as any,
         verticalAlign: { type: 'string', enum: ['top', 'center', 'bottom'] },
-        imageFit: { type: 'string', enum: ['cover', 'contain'] },
-        minHeight: { type: 'integer', minimum: 200, maximum: 800 }
+        imageFit: { type: 'string', enum: ['cover', 'contain'] }
       }
     },
     graphql: {
@@ -834,15 +988,14 @@ export default () => {
           image: String
           imageAlt: String
           imagePosition: String
-          width: Int
-          height: Int
+          width: Float
+          height: Float
           eyebrow: String
           heading: String
           body: String
           cta: JSON
           verticalAlign: String
           imageFit: String
-          minHeight: Int
         }
       `,
       settingsType: 'SplitFeatureSettings'
@@ -898,7 +1051,7 @@ export default () => {
         type AnnouncementBarSettings {
           backgroundColor: String
           textColor: String
-          delay: Int
+          delay: Float
           announcements: JSON
         }
       `,

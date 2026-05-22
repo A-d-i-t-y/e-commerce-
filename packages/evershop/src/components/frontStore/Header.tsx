@@ -3,14 +3,14 @@ import React from 'react';
 
 export function Header() {
   return (
-    <header className="header px-6">
+    <header className="header">
       <Area
         id="headerTop"
         className="header__top"
         isGlobal
         editableInPageBuilder
       />
-      <div className="header__middle grid grid-cols-3">
+      <div className="header__middle grid grid-cols-3 px-6 py-3">
         <Area
           id="headerMiddleLeft"
           className="header__middle__left flex justify-start items-center"

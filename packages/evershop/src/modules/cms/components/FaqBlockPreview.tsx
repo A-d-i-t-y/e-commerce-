@@ -6,8 +6,9 @@ import React from 'react';
 export default function FaqBlockPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-faq-block__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'flex',
         flexDirection: 'column',
@@ -23,10 +24,11 @@ export default function FaqBlockPreview(): React.ReactElement {
       {['How long does shipping take?', "What's your return policy?", 'Do you ship internationally?'].map((q) => (
         <div
           key={q}
+          className="evershop-faq-block__preview-card"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
             paddingBottom: 4,
             borderBottom: '1px solid #ebe5d8'
           }}

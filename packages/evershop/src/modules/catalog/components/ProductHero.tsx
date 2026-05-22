@@ -1,7 +1,12 @@
  
 import { Image } from '@components/common/Image.js';
+import {
+  Editable,
+  isPageBuilderActive
+} from '@components/common/page-builder/index.js';
 import { buttonVariants } from '@components/common/ui/Button.js';
-import React from 'react';
+import { ImagePlus, ShoppingBag } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { renderInlineMarkdown } from '../../../lib/util/markdownInline.js';
 
 /**
@@ -60,7 +65,56 @@ export default function ProductHero({ productHeroWidget }: ProductHeroProps) {
     product
   } = productHeroWidget;
 
-  if (!product) return null;
+  const [inPb, setInPb] = useState(false);
+  useEffect(() => {
+    setInPb(isPageBuilderActive());
+  }, []);
+
+  if (!product) {
+    if (inPb) {
+      const reverseP = imagePosition === 'right';
+      const imageBlock = (
+        <div className="evershop-product-hero__image-panel overflow-hidden bg-muted/30">
+          <div className="evershop-product-hero__placeholder flex aspect-square items-center justify-center border-2 border-dashed border-foreground/15 text-muted-foreground">
+            <ImagePlus className="h-8 w-8" />
+          </div>
+        </div>
+      );
+      const copyBlock = (
+        <div className="evershop-product-hero__copy-panel flex flex-col justify-center gap-3 p-6 md:p-8">
+          <div className="evershop-product-hero__eyebrow flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <ShoppingBag className="h-3 w-3" />
+            Featured
+          </div>
+          <div className="h-7 w-3/4 rounded-sm bg-muted-foreground/40" />
+          <div className="h-6 w-24 rounded-sm bg-muted-foreground/40" />
+          <div className="space-y-1.5">
+            <div className="h-2 w-full rounded-sm bg-muted-foreground/20" />
+            <div className="h-2 w-2/3 rounded-sm bg-muted-foreground/20" />
+          </div>
+          <div className="evershop-product-hero__ctas mt-2 flex gap-2">
+            <div className="h-10 w-32 rounded-md bg-muted-foreground/30" />
+          </div>
+        </div>
+      );
+      return (
+        <div className="evershop-product-hero evershop-product-hero--empty grid grid-cols-1 py-6 md:grid-cols-2 md:py-10">
+          {!reverseP ? (
+            <>
+              {imageBlock}
+              {copyBlock}
+            </>
+          ) : (
+            <>
+              <div className="order-2 md:order-1">{copyBlock}</div>
+              <div className="order-1 md:order-2">{imageBlock}</div>
+            </>
+          )}
+        </div>
+      );
+    }
+    return null;
+  }
   const reverse = imagePosition === 'right';
   const displayImage = image || product.image?.url || null;
   const displayAlt = imageAlt || product.image?.alt || product.name;
@@ -77,7 +131,7 @@ export default function ProductHero({ productHeroWidget }: ProductHeroProps) {
     null;
 
   const imagePanel = (
-    <div className="overflow-hidden bg-muted/30">
+    <div className="evershop-product-hero__image-panel overflow-hidden bg-muted/30">
       {displayImage ? (
         <Image
           src={displayImage}
@@ -85,10 +139,10 @@ export default function ProductHero({ productHeroWidget }: ProductHeroProps) {
           width={intrinsicWidth}
           height={intrinsicHeight}
           sizes="(max-width: 768px) 100vw, 50vw"
-          className="block w-full"
+          className="evershop-product-hero__image block w-full"
         />
       ) : (
-        <div className="flex aspect-square items-center justify-center text-sm text-muted-foreground">
+        <div className="evershop-product-hero__placeholder flex aspect-square items-center justify-center text-sm text-muted-foreground">
           Product image
         </div>
       )}
@@ -96,25 +150,29 @@ export default function ProductHero({ productHeroWidget }: ProductHeroProps) {
   );
 
   const copyPanel = (
-    <div className="flex flex-col justify-center gap-3 p-6 md:p-8">
+    <div className="evershop-product-hero__copy-panel flex flex-col justify-center gap-3 p-6 md:p-8">
       {eyebrow && (
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-foreground/70">
+        <Editable
+          as="div"
+          fieldPath="settings.eyebrow"
+          className="evershop-product-hero__eyebrow text-[11px] font-semibold uppercase tracking-widest text-foreground/70"
+        >
           {eyebrow}
-        </div>
+        </Editable>
       )}
-      <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+      <h2 className="evershop-product-hero__heading text-2xl font-semibold tracking-tight md:text-3xl">
         {product.name}
       </h2>
-      {price && <div className="text-xl font-semibold">{price}</div>}
+      {price && <div className="evershop-product-hero__price text-xl font-semibold">{price}</div>}
       {copy && (
-        <p className="text-sm text-foreground/80 md:text-base">
+        <p className="evershop-product-hero__body text-sm text-foreground/80 md:text-base">
           {renderInlineMarkdown(copy)}
         </p>
       )}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="evershop-product-hero__ctas mt-2 flex flex-wrap gap-2">
         <a
           href={product.url}
-          className={buttonVariants({ variant: 'default', size: 'lg' })}
+          className={`evershop-product-hero__cta ${buttonVariants({ variant: 'default', size: 'lg' })}`}
         >
           View details <span aria-hidden="true">→</span>
         </a>
@@ -123,7 +181,7 @@ export default function ProductHero({ productHeroWidget }: ProductHeroProps) {
   );
 
   return (
-    <div className="evershop-product-hero grid grid-cols-1 md:grid-cols-2">
+    <div className={`evershop-product-hero evershop-product-hero--${imagePosition ?? 'left'} grid grid-cols-1 py-6 md:grid-cols-2 md:py-10`}>
       {!reverse && (
         <>
           {imagePanel}

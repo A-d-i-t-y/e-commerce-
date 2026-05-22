@@ -61,8 +61,13 @@ type Widget {
   """
   Deprecated. The first placement's sort_order, or 0 if no placements.
   Use `placements[].sortOrder` instead.
+
+  Float because the page-builder uses midpoint inserts — when a widget is
+  dropped between two existing placements the new sort_order is the
+  arithmetic mean, which can be fractional (e.g. 200.5 between 200 and 201).
+  This lets us insert without renumbering every sibling.
   """
-  sortOrder: Int!
+  sortOrder: Float!
 
   editUrl: String!
   updateApi: String!
@@ -78,7 +83,12 @@ type WidgetPlacement {
   uuid: String!
   route: String!
   area: String!
-  sortOrder: Int!
+  """
+  Float because the page-builder uses midpoint inserts — see the comment
+  on `Widget.sortOrder`. Existing pre-midpoint placements still serialise
+  as integer floats (e.g. 100.0 in JSON).
+  """
+  sortOrder: Float!
   entityUrn: String
 }
 
@@ -191,7 +201,15 @@ type BasicMenuWidget {
 }
 
 """
-Return a banner Widget
+Return a banner Widget — a single static hero (use the Slideshow widget
+for rotating multi-image variants).
+
+The image is the background; optional overlay copy (`eyebrow`, `heading`,
+`subText`) sits on top, anchored via `contentPosition` (`tl…br`), with an
+optional `overlayTint` + `overlayOpacity` scrim for legibility. Two
+optional CTAs (`cta`, `cta2`) render as buttons below the copy. `link`
+remains as a whole-banner click-through for the legacy "just an image
+that links somewhere" use case — ignored when CTAs are set.
 """
 type BasicBannerWidget {
   src: String
@@ -199,6 +217,25 @@ type BasicBannerWidget {
   width: Float
   height: Float
   alt: String
+  link: String
+  eyebrow: String
+  heading: String
+  subText: String
+  contentPosition: String
+  overlayTint: String
+  overlayOpacity: Float
+  cta: JSON
+  cta2: JSON
+  """
+  Optional mobile-specific image, swapped in below the md (768px)
+  breakpoint via a CSS toggle. Falls back to `src` when null. Has its
+  own intrinsic dimensions so the rendered mobile layout uses the
+  mobile image's aspect ratio (typical: portrait crop), not the
+  desktop image's.
+  """
+  mobileImage: String
+  mobileImageWidth: Float
+  mobileImageHeight: Float
 }
 
 """
@@ -322,6 +359,41 @@ type SlideshowWidget {
 }
 
 """
+Separator widget — vertical breathing room between widgets with an
+optional divider line. `size` maps to a tight pixel-doubling scale on
+desktop; mobile values are ~⅔ for narrow-viewport sanity. `lineColor` is
+a CSS color string applied to the divider when `showLine` is true; null
+falls back to the theme's divider color.
+"""
+type SeparatorWidget {
+  size: String!
+  showLine: Boolean!
+  lineColor: String
+}
+
+"""
+Section widget — a styled, droppable container that wraps any other
+widgets. Rides the column-container synthetic area pattern: children
+sit on `area = columnsContainer_<sectionUid>_col_0`, so
+`loadWidgetInstances`, the page-builder drop handler, and the Layers
+grouping work without any container-infra changes.
+
+`width: wide` breaks out edge-to-edge; `boxed` stays inside whatever
+the theme wraps the page in. Background is a CSS color and/or an
+image, with an optional tint scrim for legibility on top of the image.
+"""
+type SectionWidget {
+  width: String!
+  padding: String!
+  background: String
+  backgroundImage: String
+  backgroundImageWidth: Float
+  backgroundImageHeight: Float
+  overlayTint: String!
+  overlayOpacity: Float!
+}
+
+"""
 Trust strip item — a single value-prop cell (e.g. "Free shipping"). The
 `icon` is a URL; theme rendering decides whether to bake it in as an
 `<img>` or swap in a built-in SVG via the title.
@@ -428,7 +500,8 @@ type BentoGridWidget {
 """
 Split feature widget — a 50/50 image + copy promo. `cta` is a JSON
 object: `{ label, url, kind?, newTab, style }`. Layout knobs:
-`imagePosition`, `verticalAlign`, `imageFit`, `minHeight`.
+`imagePosition`, `verticalAlign`, `imageFit`. The section height is
+driven by the image's natural aspect ratio at the column width.
 """
 type SplitFeatureWidget {
   image: String!
@@ -442,7 +515,6 @@ type SplitFeatureWidget {
   cta: JSON
   verticalAlign: String
   imageFit: String
-  minHeight: Int
 }
 
 """
@@ -506,12 +578,12 @@ extend type Query {
   widgetType(code: String!): WidgetType
   textWidget(text: String, className: String): TextBlockWidget
   """
-  Numeric args use Float to be tolerant of stale or in-flight non-integer
-  values from slider drags; the resolver Math.round-s before returning. The
-  output type still uses Int so storefront consumers receive clean integers.
+  `gap` is widened to Float to absorb in-flight slider drag values; the
+  resolver Math.round-s before returning. The output type still uses Int.
+  `columnCount` stays Int — it's a column count, semantically discrete.
   """
   columnsWidget(
-    columnCount: Float
+    columnCount: Int
     gap: Float
     ratio: String
     background: String
@@ -522,9 +594,21 @@ extend type Query {
   bannerWidget(
     src: String
     alignment: String
-    width: String
-    height: String
+    width: Float
+    height: Float
     alt: String
+    link: String
+    eyebrow: String
+    heading: String
+    subText: String
+    contentPosition: String
+    overlayTint: String
+    overlayOpacity: Float
+    cta: JSON
+    cta2: JSON
+    mobileImage: String
+    mobileImageWidth: Float
+    mobileImageHeight: Float
   ): BasicBannerWidget
   slideshowWidget(
     slides: [SlideInput]
@@ -545,7 +629,7 @@ extend type Query {
   ): SlideshowWidget
   trustStripWidget(
     items: [TrustItemInput]
-    columns: Float
+    columns: Int
     showIcons: Boolean
     iconSize: String
     alignment: String
@@ -581,7 +665,6 @@ extend type Query {
     cta: JSON
     verticalAlign: String
     imageFit: String
-    minHeight: Float
   ): SplitFeatureWidget
   announcementBarWidget(
     backgroundColor: String
@@ -606,14 +689,14 @@ extend type Query {
   categoryMosaicWidget(
     heading: String
     tiles: JSON
-    columns: Float
+    columns: Int
     aspect: String
     layout: String
     labelPosition: String
   ): CategoryMosaicWidget
   tieredCategoriesWidget(
     groups: JSON
-    columns: Float
+    columns: Int
     imageAspect: String
     showParentLink: Boolean
   ): TieredCategoriesWidget
@@ -622,4 +705,19 @@ extend type Query {
     gap: String
     minHeight: Float
   ): BentoGridWidget
+  separatorWidget(
+    size: String
+    showLine: Boolean
+    lineColor: String
+  ): SeparatorWidget
+  sectionWidget(
+    width: String
+    padding: String
+    background: String
+    backgroundImage: String
+    backgroundImageWidth: Float
+    backgroundImageHeight: Float
+    overlayTint: String
+    overlayOpacity: Float
+  ): SectionWidget
 }

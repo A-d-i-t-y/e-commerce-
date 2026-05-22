@@ -4,12 +4,13 @@ import React from 'react';
 export default function BrandStoryPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-brand-story__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
-        gap: 10,
+        gap: 8,
         height: 130
       }}
     >
@@ -25,7 +26,7 @@ export default function BrandStoryPreview(): React.ReactElement {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          gap: 5,
+          gap: 4,
           fontFamily:
             'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
           fontSize: 9,

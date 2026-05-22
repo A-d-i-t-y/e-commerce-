@@ -4,12 +4,13 @@ import React from 'react';
 export default function CollectionStackPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-collection-stack__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
+        gap: 8,
         height: 130,
         fontFamily:
           'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -18,7 +19,7 @@ export default function CollectionStackPreview(): React.ReactElement {
       }}
     >
       {[0, 1].map((row) => (
-        <div key={row}>
+        <div key={row} className="evershop-collection-stack__preview-row">
           <div
             style={{
               display: 'flex',

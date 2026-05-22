@@ -217,6 +217,19 @@ interface SelectedWidget {
   uid: string;
   type: string;
   settings: Record<string, unknown>;
+  /**
+   * Optional seed for the SettingsDrawer's placement map. Set when the
+   * widget is freshly inserted via drop: the placement only lives in the
+   * changeset at that moment, not in the published `widget_placement`
+   * table, so the drawer's `widgetByUuid` query (source-only) wouldn't
+   * see it and would fall back to "current route only".
+   */
+  initialPlacements?: Array<{
+    uuid: string;
+    route: string;
+    area: string;
+    sortOrder: number;
+  }>;
 }
 
 interface PendingParent {
@@ -1001,6 +1014,14 @@ export default function Editor({
          * actually dropped.
          */
         area?: string;
+        /**
+         * Set when the drop target was wrapped in `<Area isGlobal>` (header,
+         * footer, etc.). Defaults the top-level placement to `route='all'`
+         * so the widget shows on every page — matching how those slots
+         * intuitively behave. Doesn't affect child widgets inside a
+         * container; those follow their parent's existing route policy.
+         */
+        isGlobal?: boolean;
       }
     ) => {
       const widgetUuid = uuidv4();
@@ -1015,6 +1036,7 @@ export default function Editor({
           ? opts.sortOrder
           : 100;
       const targetArea = opts?.area ?? PRIMARY_AREA;
+      const targetRoute = opts?.isGlobal ? 'all' : route.id;
 
       if (pendingParent) {
         // Child widget — same shape as a top-level widget, but its placement
@@ -1103,7 +1125,7 @@ export default function Editor({
         new_payload: {
           uuid: placementUuid,
           widget_instance_uuid: widgetUuid,
-          route: route.id,
+          route: targetRoute,
           area: targetArea,
           sort_order: nextSortOrder,
           entity_urn: null
@@ -1114,7 +1136,19 @@ export default function Editor({
       setSelectedWidget({
         uid: widgetUuid,
         type: widgetType.code,
-        settings: initialSettings
+        settings: initialSettings,
+        // Seed the drawer with the placement we just inserted so the
+        // share dropdown immediately reflects route='all' (global drops)
+        // or the current route, without waiting for an iframe refresh
+        // or a `widgetByUuid` requery.
+        initialPlacements: [
+          {
+            uuid: placementUuid,
+            route: targetRoute,
+            area: targetArea,
+            sortOrder: nextSortOrder
+          }
+        ]
       });
       pushPreviewToIframe();
     },
@@ -1574,8 +1608,23 @@ export default function Editor({
   // later DELETE op if the user toggles the route off again. Otherwise an
   // ON → OFF → ON cycle would emit two INSERT ops for the same (widget,
   // route, area) and trip widget_placement's unique index on publish.
+  //
+  // `area` is the target slot — the drawer derives it from the widget's
+  // existing placements so e.g. a `headerMiddleLeft` widget shared to
+  // another route lands in `headerMiddleLeft` there too, not in `content`.
+  //
+  // `sortOrder` lets the drawer keep an existing placement's slot when
+  // "swapping" a route (e.g. flipping `route='all'` → `route='homepage'`).
+  // Matching sort_order means the storefront's cell dedupe
+  // `(widget_instance_uuid, area, sort_order)` collapses the transient
+  // `[old, new]` pair to one render — no flash during the add→remove gap.
   const addPlacement = useCallback(
-    async (targetRouteId: string, placementUuid: string) => {
+    async (
+      targetRouteId: string,
+      placementUuid: string,
+      area: string = PRIMARY_AREA,
+      sortOrder: number = 100
+    ) => {
       const ok = await postOperation({
         entity_urn: `urn:evershop:cms:widget_placement:${placementUuid}`,
         old_payload: null,
@@ -1583,8 +1632,8 @@ export default function Editor({
           uuid: placementUuid,
           widget_instance_uuid: selectedWidget?.uid,
           route: targetRouteId,
-          area: PRIMARY_AREA,
-          sort_order: 100,
+          area,
+          sort_order: sortOrder,
           entity_urn: null
         }
       });
@@ -2010,6 +2059,7 @@ export default function Editor({
         const widgetType = (msg as any).widgetType as string;
         const sortOrder = (msg as any).sortOrder;
         const dropArea = (msg as any).area as string | undefined;
+        const isGlobal = (msg as any).isGlobal === true;
         const wt = widgetTypes.find((w) => w.code === widgetType);
         if (!wt) return;
         // The iframe is the source of truth for drop positioning — it walks
@@ -2018,9 +2068,15 @@ export default function Editor({
         // target area to `handleAddWidget`. If the message lacks `sortOrder`
         // (older iframe build, theoretically), handleAddWidget falls back to
         // `100` which is safe but not position-aware.
+        //
+        // `isGlobal` is set by the drop zone when the target area is
+        // wrapped in `<Area isGlobal>` (header, footer, etc.). We use it
+        // to default the new placement to `route='all'` so the widget
+        // shows on every page — matching how those slots naturally behave.
         void handleAddWidget(wt, {
           sortOrder: typeof sortOrder === 'number' ? sortOrder : undefined,
-          area: dropArea
+          area: dropArea,
+          isGlobal
         });
         return;
       }
@@ -2590,6 +2646,31 @@ export default function Editor({
                 onAddPlacement={addPlacement}
                 onRemovePlacement={removePlacement}
                 onClose={() => setSelectedWidget(null)}
+                // Seed placements so newly-dropped widgets reflect their
+                // staged (changeset) placement immediately — `widgetByUuid`
+                // reads source-only and would miss it.
+                //
+                // Priority: drop-time placements set by `handleAddWidget`
+                // (the most direct signal — no async refresh needed), then
+                // fall back to the editor's overlay-applied layerWidgets
+                // (covers widgets the merchant clicks after navigation).
+                initialPlacements={(() => {
+                  if (selectedWidget.initialPlacements?.length) {
+                    return selectedWidget.initialPlacements;
+                  }
+                  const w = flatLayerWidgets().find(
+                    (x: any) => x?.uuid === selectedWidget.uid
+                  );
+                  const ps = (w?.placements ?? []) as any[];
+                  return ps
+                    .filter((p) => p && p.entity_urn == null)
+                    .map((p) => ({
+                      uuid: p.uuid as string,
+                      route: p.route as string,
+                      area: p.area as string,
+                      sortOrder: (p.sortOrder ?? p.sort_order ?? 0) as number
+                    }));
+                })()}
               />
             )}
           </main>

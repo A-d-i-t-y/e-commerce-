@@ -52,7 +52,7 @@ export function ColorSwatchField({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-4 gap-2">
         {swatchList.map((s) => {
           const active = (value || '') === s.value;
           return (
@@ -102,7 +102,7 @@ export function ColorSwatchField({
             value={isCustom ? value : ''}
             onChange={(e) => onChange(e.target.value)}
             placeholder="#000000"
-            className="flex-1 rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="flex-1 rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
       )}

@@ -1,4 +1,5 @@
  
+import { Editable } from '@components/common/page-builder/index.js';
 import React, { useEffect, useRef } from 'react';
 
 /**
@@ -80,20 +81,31 @@ const ROTATION_STYLES = `
   }
 `;
 
-function Inner({ content, link }: Announcement) {
+function Inner({
+  content,
+  link,
+  originalIndex
+}: Announcement & { originalIndex: number }) {
+  const fieldPath = `settings.announcements.${originalIndex}.content`;
   if (!link || !link.url) {
-    return <span className="px-4 text-center text-sm">{content}</span>;
+    return (
+      <Editable as="span" fieldPath={fieldPath} className="evershop-announcement-bar__content px-4 text-center text-sm">
+        {content}
+      </Editable>
+    );
   }
   return (
     <a
       href={link.url}
       target={link.newTab ? '_blank' : undefined}
       rel={link.newTab ? 'noopener noreferrer' : undefined}
-      className="block w-full px-4 text-center text-sm hover:opacity-80"
+      className="evershop-announcement-bar__link block w-full px-4 text-center text-sm hover:opacity-80"
     >
-      <span>{content}</span>
+      <Editable as="span" fieldPath={fieldPath} className="evershop-announcement-bar__content">
+        {content}
+      </Editable>
       {link.label && link.label !== content && (
-        <span className="ml-1 underline underline-offset-2">{link.label}</span>
+        <span className="evershop-announcement-bar__label ml-1 underline underline-offset-2">{link.label}</span>
       )}
     </a>
   );
@@ -108,7 +120,10 @@ export default function AnnouncementBar({
     delay,
     announcements = []
   } = announcementBarWidget;
-  const visible = (announcements ?? []).filter((a) => a && a.content);
+  // Track the source index so inline edits hit `settings.announcements.${originalIndex}.content`.
+  const visible = (announcements ?? [])
+    .map((a, originalIndex) => ({ a, originalIndex }))
+    .filter(({ a }) => a && a.content);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // Rotation loop. Mirrors the state-machine described at the top of the
@@ -194,13 +209,13 @@ export default function AnnouncementBar({
           color: textColor || '#ffffff'
         }}
       >
-        {visible.map((a, i) => (
+        {visible.map(({ a, originalIndex }, i) => (
           <div
             key={a.id}
             data-evershop-announcement-slide
-            className={i === 0 ? 'is-active' : ''}
+            className={`evershop-announcement-bar__item${i === 0 ? ' is-active' : ''}`}
           >
-            <Inner {...a} />
+            <Inner {...a} originalIndex={originalIndex} />
           </div>
         ))}
       </div>

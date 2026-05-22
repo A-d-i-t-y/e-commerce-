@@ -31,6 +31,11 @@ export {
   drawerTextareaClass
 } from './drawer/index.js';
 export { RepeatableAccordion } from './drawer/RepeatableAccordion.js';
+export {
+  AnchorPicker,
+  ANCHOR_CELLS
+} from './drawer/AnchorPicker.js';
+export type { ContentAnchor } from './drawer/AnchorPicker.js';
 
 // Form fields.
 export { ImagePickerField } from './fields/ImagePickerField.js';

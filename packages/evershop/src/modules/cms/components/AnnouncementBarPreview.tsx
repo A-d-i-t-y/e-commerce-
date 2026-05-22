@@ -4,8 +4,9 @@ import React from 'react';
 export default function AnnouncementBarPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-announcement-bar__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'flex',
         flexDirection: 'column',
@@ -20,7 +21,7 @@ export default function AnnouncementBarPreview(): React.ReactElement {
           fontFamily:
             'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
           fontSize: 10,
-          padding: '6px 10px',
+          padding: '8px 12px',
           textAlign: 'center'
         }}
       >

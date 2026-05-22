@@ -277,7 +277,7 @@ export const query = `
   query Query(
     $heading: String
     $tiles: JSON
-    $columns: Float
+    $columns: Int
     $aspect: String
     $layout: String
     $labelPosition: String

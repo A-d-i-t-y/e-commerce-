@@ -4,6 +4,7 @@ import uniqid from 'uniqid';
 import { error } from '../../../../../lib/log/logger.js';
 import { buildUrl } from '../../../../../lib/router/buildUrl.js';
 import { camelCase } from '../../../../../lib/util/camelCase.js';
+import { resolveLink } from '../../../../../lib/widget/linkResolver.js';
 import {
   getEnabledWidgets,
   getWidget
@@ -15,6 +16,29 @@ import { getWidgetsBaseQuery } from '../../../services/getWidgetsBaseQuery.js';
 import { WidgetCollection } from '../../../services/WidgetCollection.js';
 
 const COLUMNS_AREA_PREFIX = 'columnsContainer_';
+
+/**
+ * Resolve a CTA-shaped object ({ url, label, newTab, style, kind }) by
+ * passing its `url` through the link loaders. Null/empty CTA → null.
+ */
+async function resolveCtaUrl(cta, linkLoaders) {
+  if (!cta || typeof cta !== 'object') return null;
+  const url = await resolveLink(cta.url, linkLoaders);
+  if (!url) return null;
+  return { ...cta, url };
+}
+
+/**
+ * Resolve a link-shaped object ({ url, label, newTab }) by passing its
+ * `url` through the link loaders. Null when missing/invalid so the
+ * storefront can suppress the anchor entirely.
+ */
+async function resolveLinkObject(link, linkLoaders) {
+  if (!link || typeof link !== 'object' || !link.url) return null;
+  const url = await resolveLink(link.url, linkLoaders);
+  if (!url) return null;
+  return { ...link, url };
+}
 
 /**
  * Build the per-column children array for a container widget out of
@@ -314,10 +338,80 @@ export default {
       }
       return { text: [], className };
     },
-    bannerWidget(_, { src, alignment, width, height, alt }) {
-      return { src, alignment, width, height, alt };
+    bannerWidget: async (
+      _,
+      {
+        src,
+        alignment,
+        width,
+        height,
+        alt,
+        link,
+        eyebrow,
+        heading,
+        subText,
+        contentPosition,
+        overlayTint,
+        overlayOpacity,
+        cta,
+        cta2,
+        mobileImage,
+        mobileImageWidth,
+        mobileImageHeight
+      },
+      { linkLoaders }
+    ) => {
+      const allowedAnchors = [
+        'tl',
+        'tc',
+        'tr',
+        'ml',
+        'mc',
+        'mr',
+        'bl',
+        'bc',
+        'br'
+      ];
+      const allowedTints = ['none', 'dark', 'light', 'gradient'];
+      const op = Number(overlayOpacity);
+      const mw = Number(mobileImageWidth);
+      const mh = Number(mobileImageHeight);
+      // resolveLink: URN → current URL (per-request batched), plain URL passthrough.
+      const [resolvedLink, resolvedCta, resolvedCta2] = await Promise.all([
+        resolveLink(link, linkLoaders),
+        resolveCtaUrl(cta, linkLoaders),
+        resolveCtaUrl(cta2, linkLoaders)
+      ]);
+      return {
+        src,
+        alignment,
+        width,
+        height,
+        alt,
+        link: resolvedLink,
+        eyebrow: eyebrow || null,
+        heading: heading || null,
+        subText: subText || null,
+        contentPosition: allowedAnchors.includes(contentPosition)
+          ? contentPosition
+          : 'mc',
+        overlayTint: allowedTints.includes(overlayTint) ? overlayTint : 'none',
+        overlayOpacity: Number.isFinite(op)
+          ? Math.min(1, Math.max(0, op))
+          : 0.3,
+        cta: resolvedCta,
+        cta2: resolvedCta2,
+        mobileImage:
+          typeof mobileImage === 'string' && mobileImage.length > 0
+            ? mobileImage
+            : null,
+        mobileImageWidth:
+          Number.isFinite(mw) && mw > 0 ? Math.round(mw) : null,
+        mobileImageHeight:
+          Number.isFinite(mh) && mh > 0 ? Math.round(mh) : null
+      };
     },
-    slideshowWidget(
+    slideshowWidget: async (
       _,
       {
         slides,
@@ -335,8 +429,9 @@ export default {
         defaultContentPosition,
         defaultOverlayTint,
         defaultOverlayOpacity
-      }
-    ) {
+      },
+      { linkLoaders }
+    ) => {
       // Defaults are picked so a slideshow created before these fields
       // existed renders the same as before:
       //   - transition slide, 500ms, pauseOnHover true, no pauseOnInteraction
@@ -346,8 +441,26 @@ export default {
       //   - default content position "mc" mirrors the old centered overlay
       //   - default overlay is none — the prior render relied on
       //     text-shadow only.
+      // Resolve slide CTAs (buttonLink / button2Link) and the
+      // optional wholeSlideLink fallback. Both fields are plain strings
+      // — URN or plain URL — so resolveLink handles each value.
+      const rawSlides = Array.isArray(slides) ? slides : [];
+      const resolvedSlides = await Promise.all(
+        rawSlides.map(async (s) => {
+          if (!s || typeof s !== 'object') return s;
+          const [buttonLink, button2Link] = await Promise.all([
+            resolveLink(s.buttonLink, linkLoaders),
+            resolveLink(s.button2Link, linkLoaders)
+          ]);
+          return {
+            ...s,
+            buttonLink: buttonLink ?? s.buttonLink ?? null,
+            button2Link: button2Link ?? s.button2Link ?? null
+          };
+        })
+      );
       return {
-        slides: Array.isArray(slides) ? slides : [],
+        slides: resolvedSlides,
         autoplay: autoplay !== undefined ? Boolean(autoplay) : true,
         autoplaySpeed: Number.isFinite(Number(autoplaySpeed))
           ? Number(autoplaySpeed)
@@ -372,7 +485,7 @@ export default {
           : 0.3
       };
     },
-    brandStoryWidget(
+    brandStoryWidget: async (
       _,
       {
         layout,
@@ -387,8 +500,9 @@ export default {
         link,
         pullQuote,
         imageSize
-      }
-    ) {
+      },
+      { linkLoaders }
+    ) => {
       const allowedLayouts = [
         'image-left',
         'image-right',
@@ -409,22 +523,30 @@ export default {
         heading: heading || '',
         body: body || '',
         bodySecondary: bodySecondary || null,
-        link: link && typeof link === 'object' ? link : null,
+        link: await resolveLinkObject(link, linkLoaders),
         pullQuote: pullQuote || null,
         imageSize: allowedSizes.includes(sizeNum) ? sizeNum : 50
       };
     },
-    categoryMosaicWidget(
+    categoryMosaicWidget: async (
       _,
-      { heading, tiles, columns, aspect, layout, labelPosition }
-    ) {
+      { heading, tiles, columns, aspect, layout, labelPosition },
+      { linkLoaders }
+    ) => {
       const safeTiles = (Array.isArray(tiles) ? tiles : []).filter(
         (t) => t && typeof t === 'object' && t.image && t.label
+      );
+      // tile.link is a plain string (URN or URL).
+      const resolvedTiles = await Promise.all(
+        safeTiles.map(async (t) => ({
+          ...t,
+          link: (await resolveLink(t.link, linkLoaders)) ?? t.link
+        }))
       );
       const colsNum = Number(columns);
       return {
         heading: heading || null,
-        tiles: safeTiles,
+        tiles: resolvedTiles,
         columns:
           Number.isFinite(colsNum) && colsNum >= 2 && colsNum <= 6
             ? Math.round(colsNum)
@@ -436,16 +558,38 @@ export default {
         labelPosition: labelPosition === 'below' ? 'below' : 'overlay'
       };
     },
-    tieredCategoriesWidget(
+    tieredCategoriesWidget: async (
       _,
-      { groups, columns, imageAspect, showParentLink }
-    ) {
+      { groups, columns, imageAspect, showParentLink },
+      { linkLoaders }
+    ) => {
       const safeGroups = (Array.isArray(groups) ? groups : []).filter(
         (g) => g && typeof g === 'object' && g.parent?.label
       );
+      // Resolve parent.url + every sub.url. Promise.all keeps them all in
+      // the same microtask so DataLoader batches across rows.
+      const resolvedGroups = await Promise.all(
+        safeGroups.map(async (g) => ({
+          ...g,
+          parent: g.parent
+            ? {
+                ...g.parent,
+                url: (await resolveLink(g.parent.url, linkLoaders)) ?? null
+              }
+            : g.parent,
+          subs: Array.isArray(g.subs)
+            ? await Promise.all(
+                g.subs.map(async (s) => ({
+                  ...s,
+                  url: s ? (await resolveLink(s.url, linkLoaders)) ?? null : null
+                }))
+              )
+            : []
+        }))
+      );
       const colsNum = Number(columns);
       return {
-        groups: safeGroups,
+        groups: resolvedGroups,
         columns:
           Number.isFinite(colsNum) && colsNum >= 2 && colsNum <= 4
             ? Math.round(colsNum)
@@ -457,16 +601,76 @@ export default {
           showParentLink !== undefined ? Boolean(showParentLink) : true
       };
     },
-    bentoGridWidget(_, { tiles, gap, minHeight }) {
+    separatorWidget(_, { size, showLine, lineColor }) {
+      const allowedSizes = ['xs', 'sm', 'md', 'lg', 'xl'];
+      return {
+        size: allowedSizes.includes(size) ? size : 'md',
+        showLine: showLine !== undefined ? Boolean(showLine) : false,
+        lineColor:
+          typeof lineColor === 'string' && lineColor.length > 0
+            ? lineColor
+            : null
+      };
+    },
+    sectionWidget(
+      _,
+      {
+        width,
+        padding,
+        background,
+        backgroundImage,
+        backgroundImageWidth,
+        backgroundImageHeight,
+        overlayTint,
+        overlayOpacity
+      }
+    ) {
+      const allowedWidths = ['wide', 'boxed'];
+      const allowedPaddings = ['none', 'sm', 'md', 'lg', 'xl'];
+      const allowedTints = ['none', 'dark', 'light', 'gradient'];
+      const w = Number(backgroundImageWidth);
+      const h = Number(backgroundImageHeight);
+      const op = Number(overlayOpacity);
+      return {
+        width: allowedWidths.includes(width) ? width : 'boxed',
+        padding: allowedPaddings.includes(padding) ? padding : 'md',
+        background:
+          typeof background === 'string' && background.length > 0
+            ? background
+            : null,
+        backgroundImage:
+          typeof backgroundImage === 'string' && backgroundImage.length > 0
+            ? backgroundImage
+            : null,
+        backgroundImageWidth:
+          Number.isFinite(w) && w > 0 ? Math.round(w) : null,
+        backgroundImageHeight:
+          Number.isFinite(h) && h > 0 ? Math.round(h) : null,
+        overlayTint: allowedTints.includes(overlayTint) ? overlayTint : 'none',
+        overlayOpacity: Number.isFinite(op)
+          ? Math.min(1, Math.max(0, op))
+          : 0.3
+      };
+    },
+    bentoGridWidget: async (_, { tiles, gap, minHeight }, { linkLoaders }) => {
       const safeTiles = (Array.isArray(tiles) ? tiles : [])
         .filter(
           (t) =>
             t && typeof t === 'object' && t.heading && t.link && t.link.url
         )
         .slice(0, 5);
+      const resolvedTiles = await Promise.all(
+        safeTiles.map(async (t) => ({
+          ...t,
+          link: await resolveLinkObject(t.link, linkLoaders)
+        }))
+      );
+      // After resolution, drop tiles whose link no longer resolves so the
+      // storefront doesn't render a CTA with no target.
+      const finalTiles = resolvedTiles.filter((t) => t.link);
       const minH = Number(minHeight);
       return {
-        tiles: safeTiles,
+        tiles: finalTiles,
         gap: ['sm', 'md', 'lg'].includes(gap) ? gap : 'md',
         // Math.round guards the output side — input was widened to Float so
         // a slider mid-drag (e.g. 360.5) doesn't crash GraphQL validation,
@@ -477,7 +681,7 @@ export default {
           : 360
       };
     },
-    splitFeatureWidget(
+    splitFeatureWidget: async (
       _,
       {
         image,
@@ -490,16 +694,15 @@ export default {
         body,
         cta,
         verticalAlign,
-        imageFit,
-        minHeight
-      }
-    ) {
+        imageFit
+      },
+      { linkLoaders }
+    ) => {
       const allowedPosition = imagePosition === 'right' ? 'right' : 'left';
       const allowedAlign = ['top', 'center', 'bottom'].includes(verticalAlign)
         ? verticalAlign
         : 'center';
       const allowedFit = imageFit === 'contain' ? 'contain' : 'cover';
-      const minH = Number(minHeight);
       const w = Number(width);
       const h = Number(height);
       return {
@@ -514,35 +717,37 @@ export default {
         eyebrow: eyebrow || null,
         heading: heading || '',
         body: body || null,
-        cta: cta && typeof cta === 'object' ? cta : null,
+        cta: await resolveCtaUrl(cta, linkLoaders),
         verticalAlign: allowedAlign,
-        imageFit: allowedFit,
-        minHeight: Number.isFinite(minH)
-          ? Math.round(Math.min(800, Math.max(200, minH)))
-          : 480
+        imageFit: allowedFit
       };
     },
-    announcementBarWidget(
+    announcementBarWidget: async (
       _,
-      { backgroundColor, textColor, delay, announcements }
-    ) {
-      const safeAnnouncements = (Array.isArray(announcements)
-        ? announcements
-        : []
-      )
-        .filter((a) => a && typeof a === 'object' && a.content)
-        .map((a) => ({
-          id: a.id,
-          content: String(a.content),
-          link:
+      { backgroundColor, textColor, delay, announcements },
+      { linkLoaders }
+    ) => {
+      const filtered = (Array.isArray(announcements) ? announcements : [])
+        .filter((a) => a && typeof a === 'object' && a.content);
+      const safeAnnouncements = await Promise.all(
+        filtered.map(async (a) => {
+          const resolvedUrl =
             a.link && a.link.url
+              ? await resolveLink(a.link.url, linkLoaders)
+              : null;
+          return {
+            id: a.id,
+            content: String(a.content),
+            link: resolvedUrl
               ? {
-                  url: a.link.url,
+                  url: resolvedUrl,
                   label: a.link.label || a.content,
                   newTab: !!a.link.newTab
                 }
               : null
-        }));
+          };
+        })
+      );
       const d = Number(delay);
       return {
         backgroundColor:
@@ -557,7 +762,7 @@ export default {
         announcements: safeAnnouncements
       };
     },
-    couponBlockWidget(
+    couponBlockWidget: async (
       _,
       {
         eyebrow,
@@ -570,8 +775,9 @@ export default {
         expires,
         borderStyle,
         backgroundColor
-      }
-    ) {
+      },
+      { linkLoaders }
+    ) => {
       const allowedBorders = ['solid', 'dashed', 'none'];
       // Loosely-validate expires: it must parse to a date. Anything else is
       // dropped to null so the storefront script can branch cleanly.
@@ -580,6 +786,7 @@ export default {
         const t = Date.parse(expires);
         if (Number.isFinite(t)) safeExpires = new Date(t).toISOString();
       }
+      const resolvedCta = (await resolveLink(ctaLink, linkLoaders)) || '/';
       return {
         eyebrow: eyebrow || null,
         // Heading and code are required; default to sane placeholders so a
@@ -589,7 +796,7 @@ export default {
         body: body || null,
         code: code || 'SAVE',
         ctaLabel: ctaLabel || null,
-        ctaLink: ctaLink || '/',
+        ctaLink: resolvedCta,
         ctaNewTab: ctaNewTab !== undefined ? Boolean(ctaNewTab) : false,
         expires: safeExpires,
         borderStyle: allowedBorders.includes(borderStyle)
@@ -636,19 +843,26 @@ export default {
           allowMultipleOpen !== undefined ? Boolean(allowMultipleOpen) : false
       };
     },
-    trustStripWidget(
+    trustStripWidget: async (
       _,
-      { items, columns, showIcons, iconSize, alignment, divider }
-    ) {
+      { items, columns, showIcons, iconSize, alignment, divider },
+      { linkLoaders }
+    ) => {
       // Coerce items defensively — JSONB storage doesn't enforce nullness,
       // so missing `link` should be null (not undefined) and missing
       // `description` should be null (not empty string) so the storefront
       // can branch cleanly.
-      const safeItems = (Array.isArray(items) ? items : [])
-        .filter((it) => it && typeof it === 'object' && it.title)
-        .map((it) => {
+      const filtered = (Array.isArray(items) ? items : []).filter(
+        (it) => it && typeof it === 'object' && it.title
+      );
+      const safeItems = await Promise.all(
+        filtered.map(async (it) => {
           const iw = Number(it.iconWidth);
           const ih = Number(it.iconHeight);
+          const resolvedUrl =
+            it.link && it.link.url
+              ? await resolveLink(it.link.url, linkLoaders)
+              : null;
           return {
             id: it.id,
             icon: it.icon || null,
@@ -656,12 +870,12 @@ export default {
             iconHeight: Number.isFinite(ih) && ih > 0 ? Math.round(ih) : null,
             title: String(it.title),
             description: it.description || null,
-            link:
-              it.link && it.link.url
-                ? { url: it.link.url, newTab: !!it.link.newTab }
-                : null
+            link: resolvedUrl
+              ? { url: resolvedUrl, newTab: !!it.link.newTab }
+              : null
           };
-        });
+        })
+      );
       const allowedIconSize = ['sm', 'md', 'lg'].includes(iconSize)
         ? iconSize
         : 'md';

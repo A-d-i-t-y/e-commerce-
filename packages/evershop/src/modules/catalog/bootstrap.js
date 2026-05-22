@@ -157,7 +157,11 @@ export default () => {
     defaultSettings: {
       collection: null,
       count: 4,
-      countPerRow: 4
+      countPerRow: 4,
+      heading: null,
+      subText: null,
+      viewAllLink: null,
+      viewAllLabel: null
     },
     enabled: true,
     schema: {
@@ -166,7 +170,11 @@ export default () => {
       properties: {
         collection: { type: ['string', 'null'] },
         count: { type: 'integer', minimum: 1, maximum: 48 },
-        countPerRow: { type: 'integer', enum: [1, 2, 3, 4, 6] }
+        countPerRow: { type: 'integer', enum: [1, 2, 3, 4, 6] },
+        heading: { type: ['string', 'null'] },
+        subText: { type: ['string', 'null'] },
+        viewAllLink: { type: ['string', 'null'] },
+        viewAllLabel: { type: ['string', 'null'] }
       }
     },
     graphql: {
@@ -175,6 +183,10 @@ export default () => {
           collection: ID
           count: Int
           countPerRow: Int
+          heading: String
+          subText: String
+          viewAllLink: String
+          viewAllLabel: String
         }
       `,
       settingsType: 'CollectionProductsSettings'
@@ -259,8 +271,7 @@ export default () => {
       eyebrow: 'COLLECTION',
       heading: '',
       body: null,
-      previewCount: 4,
-      showPrice: true
+      previewCount: 4
     },
     enabled: true,
     schema: {
@@ -276,8 +287,7 @@ export default () => {
         eyebrow: { type: ['string', 'null'] },
         heading: { type: ['string', 'null'] },
         body: { type: ['string', 'null'] },
-        previewCount: { type: 'integer', enum: [2, 4] },
-        showPrice: { type: ['boolean', 'null'] }
+        previewCount: { type: 'integer', enum: [2, 4] }
       }
     },
     graphql: {
@@ -287,13 +297,12 @@ export default () => {
           image: String
           imageAlt: String
           imagePosition: String
-          imageWidth: Int
-          imageHeight: Int
+          imageWidth: Float
+          imageHeight: Float
           eyebrow: String
           heading: String
           body: String
           previewCount: Int
-          showPrice: Boolean
         }
       `,
       settingsType: 'CollectionSpotlightSettings'
@@ -350,8 +359,8 @@ export default () => {
           productUuid: String
           image: String
           imageAlt: String
-          imageWidth: Int
-          imageHeight: Int
+          imageWidth: Float
+          imageHeight: Float
           eyebrow: String
           copy: String
           imagePosition: String

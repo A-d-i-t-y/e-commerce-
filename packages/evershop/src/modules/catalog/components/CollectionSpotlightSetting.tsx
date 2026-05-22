@@ -5,7 +5,6 @@ import {
   MarkdownBodyField,
   Section,
   Segmented,
-  Toggle,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { CollectionPicker } from '@components/common/page-builder/pickers/CollectionPicker.js';
@@ -23,7 +22,6 @@ interface CollectionSpotlightSettingProps {
     heading?: string;
     body?: string | null;
     previewCount?: 2 | 4;
-    showPrice?: boolean;
     collectionName?: string | null;
   };
 }
@@ -42,7 +40,6 @@ export default function CollectionSpotlightSetting({
     heading,
     body,
     previewCount,
-    showPrice,
     collectionName
   } = collectionSpotlightWidget ?? {};
 
@@ -62,8 +59,6 @@ export default function CollectionSpotlightSetting({
   const bodyV = (watch('settings.body') as string) ?? body ?? '';
   const previewCountV =
     ((watch('settings.previewCount') as number) ?? previewCount ?? 4) as 2 | 4;
-  const showPriceV =
-    (watch('settings.showPrice') as boolean | null) ?? showPrice ?? true;
 
   // The picker callback updates `_pickedName` so we can show the
   // collection name as a placeholder for the heading override.
@@ -193,13 +188,6 @@ export default function CollectionSpotlightSetting({
             }
           />
         </Field>
-        <Toggle
-          label="Show price under product name"
-          checked={showPriceV}
-          onChange={(v) =>
-            setValue('settings.showPrice', v, { shouldDirty: true })
-          }
-        />
       </Section>
 
       <input
@@ -239,8 +227,7 @@ export const query = `
     $eyebrow: String
     $heading: String
     $body: String
-    $previewCount: Float
-    $showPrice: Boolean
+    $previewCount: Int
   ) {
     collectionSpotlightWidget(
       collection: $collection
@@ -253,7 +240,6 @@ export const query = `
       heading: $heading
       body: $body
       previewCount: $previewCount
-      showPrice: $showPrice
     ) {
       collection
       image
@@ -265,7 +251,6 @@ export const query = `
       heading
       body
       previewCount
-      showPrice
       collectionName
     }
   }
@@ -281,6 +266,5 @@ export const variables = `{
   eyebrow: getWidgetSetting("eyebrow", "COLLECTION"),
   heading: getWidgetSetting("heading"),
   body: getWidgetSetting("body"),
-  previewCount: getWidgetSetting("previewCount", 4),
-  showPrice: getWidgetSetting("showPrice", true)
+  previewCount: getWidgetSetting("previewCount", 4)
 }`;

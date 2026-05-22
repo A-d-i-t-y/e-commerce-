@@ -7,6 +7,7 @@ import React from 'react';
 export default function BannerPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-banner__preview"
       style={{
         background: '#efe6d4',
         height: 130,

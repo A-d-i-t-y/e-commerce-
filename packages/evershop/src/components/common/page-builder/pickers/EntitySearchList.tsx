@@ -79,7 +79,7 @@ export function EntitySearchList({
                 <button
                   type="button"
                   onClick={() => onSelect(it.id, it)}
-                  className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors ${
+                  className={`flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left text-xs transition-colors ${
                     active
                       ? 'border-primary/40 bg-primary/5'
                       : 'border-divider hover:bg-muted/40'

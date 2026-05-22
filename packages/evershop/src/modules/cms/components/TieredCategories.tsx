@@ -1,5 +1,6 @@
  
 import { Image } from '@components/common/Image.js';
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 
 /**
@@ -48,7 +49,10 @@ export default function TieredCategories({
 }: TieredCategoriesProps) {
   const { groups = [], columns, imageAspect, showParentLink } =
     tieredCategoriesWidget;
-  const visible = groups.filter((g) => g && g.parent?.label);
+  // Preserve original settings index for `settings.groups.${originalIndex}.parent.label`.
+  const visible = groups
+    .map((group, originalIndex) => ({ group, originalIndex }))
+    .filter(({ group }) => group && group.parent?.label);
   if (visible.length === 0) return null;
   const cols =
     columns && columns >= 2
@@ -65,27 +69,27 @@ export default function TieredCategories({
         }}
       />
     <div
-      className="evershop-tiered-categories evershop-tiered-grid grid grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2 md:gap-6"
+      className="evershop-tiered-categories evershop-tiered-grid grid grid-cols-1 gap-4 py-6 sm:grid-cols-2 md:gap-6 md:py-10"
       // Custom property drives the desktop `repeat(N, …)`. The matching
       // media-query rule below sets `grid-template-columns` at ≥1024px so
       // the columns setting only kicks in above the tablet breakpoint
       // (per spec: tablet is always 2 columns).
       style={{ ['--evershop-tiered-cols' as string]: cols } as React.CSSProperties}
     >
-      {visible.map((group) => {
+      {visible.map(({ group, originalIndex }) => {
         const ParentTag: React.ElementType =
           showParentLink && group.parent.url ? 'a' : 'div';
         return (
-          <div key={group.id} className="space-y-3">
+          <div key={group.id} className="evershop-tiered-categories__group space-y-3">
             <ParentTag
               href={showParentLink ? group.parent.url : undefined}
               aria-label={showParentLink ? `Shop ${group.parent.label}` : undefined}
-              className={`group block overflow-hidden ${
+              className={`evershop-tiered-categories__parent group block overflow-hidden ${
                 showParentLink ? 'transition-opacity hover:opacity-90' : ''
               }`}
             >
               <div
-                className="relative overflow-hidden bg-muted/30"
+                className="evershop-tiered-categories__image-wrapper relative overflow-hidden bg-muted/30"
                 style={{ paddingTop: aspectPadding }}
               >
                 {group.image && (
@@ -104,31 +108,35 @@ export default function TieredCategories({
                     }
                     objectFit="cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    className="absolute inset-0 h-full w-full transition-[filter] duration-200 group-hover:brightness-90"
+                    className="evershop-tiered-categories__image absolute inset-0 h-full w-full transition-[filter] duration-200 group-hover:brightness-90"
                     style={{ aspectRatio: 'auto' }}
                   />
                 )}
               </div>
             </ParentTag>
-            <div>
-              <div className="text-base font-semibold">
+            <div className="evershop-tiered-categories__content">
+              <Editable
+                as="div"
+                fieldPath={`settings.groups.${originalIndex}.parent.label`}
+                className="evershop-tiered-categories__subheading text-base font-semibold"
+              >
                 {group.parent.label}
-              </div>
-              <ul className="flex flex-wrap items-baseline gap-x-1 gap-y-1 text-sm">
+              </Editable>
+              <ul className="evershop-tiered-categories__subs flex flex-wrap items-baseline gap-x-1 gap-y-1 text-sm">
                 {(group.subs ?? [])
                   .filter((s) => s && s.label && s.url)
                   .map((sub, i, arr) => (
-                    <li key={sub.id} className="flex items-baseline">
+                    <li key={sub.id} className="evershop-tiered-categories__sub flex items-baseline">
                       <a
                         href={sub.url}
-                        className="text-foreground/80 hover:underline"
+                        className="evershop-tiered-categories__sub-link text-foreground/80 hover:underline"
                       >
                         {sub.label}
                       </a>
                       {i < arr.length - 1 && (
                         <span
                           aria-hidden="true"
-                          className="mx-1.5 text-foreground/40"
+                          className="evershop-tiered-categories__divider mx-2 text-foreground/40"
                         >
                           ·
                         </span>
@@ -148,7 +156,7 @@ export default function TieredCategories({
 export const query = `
   query Query(
     $groups: JSON
-    $columns: Float
+    $columns: Int
     $imageAspect: String
     $showParentLink: Boolean
   ) {

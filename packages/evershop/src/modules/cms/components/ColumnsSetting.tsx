@@ -121,7 +121,7 @@ function Segmented<T extends string>({
 }) {
   return (
     <div
-      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-0.5"
+      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-1"
       role="radiogroup"
     >
       {options.map((opt) => {
@@ -186,7 +186,7 @@ function RatioTile({
       onClick={onClick}
       title={preset.label}
       aria-pressed={active}
-      className={`group flex flex-col items-stretch gap-1.5 rounded-md border p-2 text-left transition-colors ${
+      className={`group flex flex-col items-stretch gap-2 rounded-md border p-2 text-left transition-colors ${
         active
           ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/40'
           : 'border-divider hover:bg-muted/40'
@@ -277,7 +277,7 @@ function AnchorPicker({
   onChange: (v: ColumnAnchor) => void;
 }) {
   return (
-    <div className="inline-grid grid-cols-3 gap-1 rounded-md border border-divider bg-muted/30 p-1.5">
+    <div className="inline-grid grid-cols-3 gap-1 rounded-md border border-divider bg-muted/30 p-2">
       {ANCHOR_CELLS.map((c) => {
         const active = value === c;
         return (
@@ -397,7 +397,7 @@ export default function ColumnsSetting({
           label="Column layout"
           hint="Drag widgets into each column. Children re-flow when you change the ratio."
         >
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-2">
             {RATIO_PRESETS.map((p) => (
               <RatioTile
                 key={p.value}
@@ -435,7 +435,7 @@ export default function ColumnsSetting({
       {/* Row appearance */}
       <Section title="Row appearance">
         <Field label="Background">
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-2">
             {BG_SWATCHES.map((s) => {
               const active = (watchedBg || '') === s.value;
               return (
@@ -490,7 +490,7 @@ export default function ColumnsSetting({
               value={isCustomBg ? watchedBg : ''}
               onChange={(e) => handlePickBg(e.target.value)}
               placeholder="#000000"
-              className="flex-1 rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="flex-1 rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </Field>
@@ -546,7 +546,7 @@ export default function ColumnsSetting({
 
 export const query = `
   query Query(
-    $columnCount: Float
+    $columnCount: Int
     $gap: Float
     $ratio: String
     $background: String

@@ -31,7 +31,7 @@ type CollectionStackWidget {
 extend type Query {
   collectionStackWidget(
     collections: JSON
-    productCount: Float
+    productCount: Int
     showPrice: Boolean
     divider: Boolean
   ): CollectionStackWidget

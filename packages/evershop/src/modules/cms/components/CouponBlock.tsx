@@ -1,3 +1,4 @@
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 
 /**
@@ -108,26 +109,45 @@ export default function CouponBlock({ couponBlockWidget }: CouponBlockProps) {
         }}
       >
         {eyebrow && (
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-foreground/70">
+          <Editable
+            as="div"
+            fieldPath="settings.eyebrow"
+            className="evershop-coupon-block__eyebrow mb-2 text-[11px] font-semibold uppercase tracking-widest text-foreground/70"
+          >
             {eyebrow}
-          </div>
+          </Editable>
         )}
-        <h2 className="text-2xl font-semibold tracking-tight">{heading}</h2>
-        {body && <p className="mt-2 text-sm text-foreground/70">{body}</p>}
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+        <Editable
+          as="h2"
+          fieldPath="settings.heading"
+          className="evershop-coupon-block__heading text-2xl font-semibold tracking-tight"
+        >
+          {heading}
+        </Editable>
+        {body && (
+          <Editable
+            as="p"
+            fieldPath="settings.body"
+            multiline
+            className="evershop-coupon-block__body mt-2 text-sm text-foreground/70"
+          >
+            {body}
+          </Editable>
+        )}
+        <div className="evershop-coupon-block__ctas mt-5 flex flex-wrap items-center justify-center gap-2">
           <div
             id={codeBoxId}
             aria-label={`${codeUpper} — click Copy to copy`}
-            className="rounded-md border border-foreground/30 bg-card px-4 py-2 font-mono text-base font-semibold tracking-wider"
+            className="evershop-coupon-block__code-box rounded-md border border-foreground/30 bg-card px-3 py-2 font-mono text-sm font-semibold tracking-wider"
           >
-            {codeUpper}
+            <span className="evershop-coupon-block__code">{codeUpper}</span>
           </div>
           <button
             type="button"
             data-evershop-coupon-copy={codeUpper}
             data-evershop-coupon-copy-target={codeBoxId}
             aria-live="polite"
-            className="rounded-md border border-foreground/30 bg-card px-3 py-2 text-sm font-medium hover:bg-muted/30"
+            className="evershop-coupon-block__copy-button rounded-md border border-foreground/30 bg-card px-3 py-2 text-sm font-medium hover:bg-muted/30"
           >
             <span data-evershop-coupon-copy-label>Copy</span>
           </button>
@@ -135,21 +155,15 @@ export default function CouponBlock({ couponBlockWidget }: CouponBlockProps) {
             href={ctaLink}
             target={ctaNewTab ? '_blank' : undefined}
             rel={ctaNewTab ? 'noopener noreferrer' : undefined}
-            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="evershop-coupon-block__cta rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             {ctaLabel || 'Shop now →'}
           </a>
         </div>
       </div>
-      <script
-         
-        dangerouslySetInnerHTML={{ __html: COPY_SCRIPT }}
-      />
+      <script dangerouslySetInnerHTML={{ __html: COPY_SCRIPT }} />
       {expires && (
-        <script
-           
-          dangerouslySetInnerHTML={{ __html: EXPIRY_SCRIPT }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: EXPIRY_SCRIPT }} />
       )}
     </>
   );

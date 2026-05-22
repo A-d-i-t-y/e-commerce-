@@ -31,12 +31,15 @@ export interface PagePickResult {
 
 export interface PagePickerProps {
   selectedUrl?: string | null;
+  /** Highlight the item whose uuid matches this — preferred over selectedUrl. */
+  selectedUuid?: string | null;
   onPick: (result: PagePickResult) => void;
   limit?: number;
 }
 
 export function PagePicker({
   selectedUrl,
+  selectedUuid,
   onPick,
   limit = 10
 }: PagePickerProps) {
@@ -72,10 +75,19 @@ export function PagePicker({
     })
   );
 
+  // When selecting by uuid (URN storage), look up the item.id whose
+  // backing _uuid matches; otherwise fall back to selectedUrl.
+  const selectedIdByUuid =
+    selectedUuid
+      ? items.find(
+          (it) => (it as unknown as { _uuid: string })._uuid === selectedUuid
+        )?.id ?? null
+      : null;
+
   return (
     <EntitySearchList
       items={items}
-      selectedId={selectedUrl ?? null}
+      selectedId={selectedIdByUuid ?? selectedUrl ?? null}
       search={search}
       onSearchChange={setSearch}
       loading={result.fetching}

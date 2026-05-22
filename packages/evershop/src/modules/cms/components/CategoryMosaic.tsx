@@ -1,6 +1,11 @@
  
 import { Image } from '@components/common/Image.js';
-import React from 'react';
+import {
+  Editable,
+  isPageBuilderActive
+} from '@components/common/page-builder/index.js';
+import { ImagePlus } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 /**
  * Category mosaic — a grid of category tiles, each with a full-bleed image
@@ -54,33 +59,125 @@ function effectiveColumns(
   return Math.min(Math.max(tiles.length, 1), 4);
 }
 
+// Page-builder-only placeholder. Mirrors the configured grid: N tile
+// outlines with a label slot so the merchant sees the final grid shape
+// before any images are picked.
+function Placeholder({
+  heading,
+  count,
+  aspectPadding,
+  labelPosition
+}: {
+  heading: string | null;
+  count: number;
+  aspectPadding: string;
+  labelPosition: MosaicLabelPosition;
+}) {
+  return (
+    <div className="evershop-category-mosaic evershop-category-mosaic--placeholder py-6 md:py-10">
+      {heading && (
+        <Editable
+          as="h2"
+          fieldPath="settings.heading"
+          className="evershop-category-mosaic__heading mb-4 text-2xl font-semibold tracking-tight"
+        >
+          {heading}
+        </Editable>
+      )}
+      <div
+        className="evershop-category-mosaic__tiles grid gap-4"
+        style={{
+          gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`
+        }}
+      >
+        {Array.from({ length: count }, (_, i) => (
+          <div key={i} className="evershop-category-mosaic__tile evershop-category-mosaic__tile--placeholder block">
+            <div
+              className="evershop-category-mosaic__placeholder relative flex items-center justify-center border-2 border-dashed border-foreground/15 bg-muted/30 text-muted-foreground"
+              style={{ paddingTop: aspectPadding }}
+            >
+              <ImagePlus className="absolute h-6 w-6" />
+              {labelPosition === 'overlay' && (
+                <div className="evershop-category-mosaic__label evershop-category-mosaic__label--overlay absolute bottom-3 left-3 right-3 flex items-center justify-between text-muted-foreground">
+                  <div className="h-2 w-20 rounded-sm bg-muted-foreground/40" />
+                  <span aria-hidden="true">→</span>
+                </div>
+              )}
+            </div>
+            {labelPosition === 'below' && (
+              <div className="evershop-category-mosaic__label evershop-category-mosaic__label--below mt-2 flex items-center justify-between">
+                <div className="h-2 w-24 rounded-sm bg-muted-foreground/40" />
+                <span aria-hidden="true" className="text-muted-foreground">
+                  →
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CategoryMosaic({
   categoryMosaicWidget
 }: CategoryMosaicProps) {
   const { heading, tiles = [], columns, aspect, layout, labelPosition } =
     categoryMosaicWidget;
-  const visible = tiles.filter((t) => t && t.image && t.label);
-  if (visible.length === 0) return null;
+  const [inPb, setInPb] = useState(false);
+  useEffect(() => {
+    setInPb(isPageBuilderActive());
+  }, []);
+  // Preserve the original settings index alongside the filter so inline
+  // editing can write back to `settings.tiles.${originalIndex}.label`.
+  const visible = tiles
+    .map((tile, originalIndex) => ({ tile, originalIndex }))
+    .filter(({ tile }) => tile && tile.image && tile.label);
+  if (visible.length === 0) {
+    if (inPb) {
+      // Use the configured-but-unfilled tiles' count when present so the
+      // placeholder grid matches what the merchant will see once they pick
+      // images. Falls back to 3 (the default tile count).
+      const count = Math.max(1, Math.min(6, (tiles ?? []).length || 3));
+      return (
+        <Placeholder
+          heading={heading}
+          count={count}
+          aspectPadding={ASPECT_PADDING[aspect ?? 'square']}
+          labelPosition={labelPosition ?? 'overlay'}
+        />
+      );
+    }
+    return null;
+  }
 
-  const cols = effectiveColumns(visible, columns);
+  const cols = effectiveColumns(
+    visible.map(({ tile }) => tile),
+    columns
+  );
   const asymmetric = layout === 'asymmetric' && (cols === 3 || cols === 4);
   const aspectPadding = ASPECT_PADDING[aspect ?? 'square'];
 
   return (
-    <div className="evershop-category-mosaic px-4 py-6">
+    <div className="evershop-category-mosaic py-6 md:py-10">
       {heading && (
-        <h2 className="mb-4 text-2xl font-semibold tracking-tight">
+        <Editable
+          as="h2"
+          fieldPath="settings.heading"
+          className="evershop-category-mosaic__heading mb-4 text-2xl font-semibold tracking-tight"
+        >
           {heading}
-        </h2>
+        </Editable>
       )}
       <div
-        className="grid gap-4"
+        className="evershop-category-mosaic__tiles grid gap-4"
         style={{
           gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`
         }}
       >
-        {visible.map((tile, i) => {
+        {visible.map(({ tile, originalIndex }, i) => {
           const span = asymmetric && i === 0 ? 2 : 1;
+          const labelFieldPath = `settings.tiles.${originalIndex}.label`;
           return (
             <a
               key={tile.id}
@@ -88,11 +185,11 @@ export default function CategoryMosaic({
               target={tile.newTab ? '_blank' : undefined}
               rel={tile.newTab ? 'noopener noreferrer' : undefined}
               aria-label={`Shop ${tile.label}`}
-              className="group block overflow-hidden"
+              className="evershop-category-mosaic__tile group block overflow-hidden"
               style={{ gridColumn: `span ${span}` }}
             >
               <div
-                className="relative overflow-hidden bg-muted/30"
+                className="evershop-category-mosaic__image-wrapper relative overflow-hidden bg-muted/30"
                 style={{ paddingTop: aspectPadding }}
               >
                 <Image
@@ -110,19 +207,23 @@ export default function CategoryMosaic({
                   }
                   objectFit="cover"
                   sizes="(max-width: 768px) 50vw, 25vw"
-                  className="absolute inset-0 h-full w-full transition-transform duration-200 group-hover:scale-[1.03]"
+                  className="evershop-category-mosaic__image absolute inset-0 h-full w-full transition-transform duration-200 group-hover:scale-[1.03]"
                   style={{ aspectRatio: 'auto' }}
                 />
                 {labelPosition === 'overlay' && (
                   <>
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent"
+                      className="evershop-category-mosaic__overlay-tint pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent"
                     />
-                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between p-4 text-white">
-                      <span className="text-base font-semibold">
+                    <div className="evershop-category-mosaic__label evershop-category-mosaic__label--overlay absolute bottom-0 left-0 right-0 flex items-center justify-between p-4 text-white">
+                      <Editable
+                        as="span"
+                        fieldPath={labelFieldPath}
+                        className="text-base font-semibold"
+                      >
                         {tile.label}
-                      </span>
+                      </Editable>
                       <span aria-hidden="true" className="text-base">
                         →
                       </span>
@@ -131,8 +232,14 @@ export default function CategoryMosaic({
                 )}
               </div>
               {labelPosition === 'below' && (
-                <div className="mt-2 flex items-center justify-between text-foreground">
-                  <span className="text-sm font-semibold">{tile.label}</span>
+                <div className="evershop-category-mosaic__label evershop-category-mosaic__label--below mt-2 flex items-center justify-between text-foreground">
+                  <Editable
+                    as="span"
+                    fieldPath={labelFieldPath}
+                    className="text-sm font-semibold"
+                  >
+                    {tile.label}
+                  </Editable>
                   <span aria-hidden="true">→</span>
                 </div>
               )}
@@ -148,7 +255,7 @@ export const query = `
   query Query(
     $heading: String
     $tiles: JSON
-    $columns: Float
+    $columns: Int
     $aspect: String
     $layout: String
     $labelPosition: String

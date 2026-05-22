@@ -220,7 +220,7 @@ const SortableMenuItem: React.FC<SortableMenuItemProps> = ({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 rounded-md border border-divider bg-card px-2 py-1.5"
+      className="flex items-center gap-2 rounded-md border border-divider bg-card px-2 py-2"
     >
       <button
         type="button"
@@ -632,7 +632,7 @@ export default function BasicMenuSetting({
                       deleteItem={deleteItem}
                     />
                     {menu.children && menu.children.length > 0 && (
-                      <div className="ml-4 mt-1.5 border-l border-divider pl-2">
+                      <div className="ml-4 mt-2 border-l border-divider pl-2">
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
@@ -690,7 +690,7 @@ export default function BasicMenuSetting({
             {...register('settings.className')}
             defaultValue={className}
             placeholder="e.g. main-nav font-semibold"
-            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
       </Section>

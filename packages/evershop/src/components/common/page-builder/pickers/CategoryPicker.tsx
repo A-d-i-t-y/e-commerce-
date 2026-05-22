@@ -32,13 +32,16 @@ const SEARCH_QUERY = `
 `;
 
 export interface CategoryPickerProps {
-  selectedUrl: string | null;
+  selectedUrl?: string | null;
+  /** Highlight by uuid (preferred when caller stores a URN). */
+  selectedUuid?: string | null;
   onPick: (next: { url: string; name: string; uuid: string }) => void;
   limit?: number;
 }
 
 export function CategoryPicker({
   selectedUrl,
+  selectedUuid,
   onPick,
   limit = 10
 }: CategoryPickerProps) {
@@ -74,10 +77,17 @@ export function CategoryPicker({
     })
   );
 
+  const selectedIdByUuid =
+    selectedUuid
+      ? items.find(
+          (it) => (it as unknown as { _uuid: string })._uuid === selectedUuid
+        )?.id ?? null
+      : null;
+
   return (
     <EntitySearchList
       items={items}
-      selectedId={selectedUrl}
+      selectedId={selectedIdByUuid ?? selectedUrl ?? null}
       search={search}
       onSearchChange={setSearch}
       loading={result.fetching}

@@ -201,7 +201,7 @@ export default function TrustStripSetting({
                   }
                 />
                 {item.link && (
-                  <div className="mt-1.5">
+                  <div className="mt-2">
                     <Toggle
                       label="Open in new tab"
                       checked={!!item.link.newTab}
@@ -288,7 +288,7 @@ export default function TrustStripSetting({
 export const query = `
   query Query(
     $items: [TrustItemInput]
-    $columns: Float
+    $columns: Int
     $showIcons: Boolean
     $iconSize: String
     $alignment: String

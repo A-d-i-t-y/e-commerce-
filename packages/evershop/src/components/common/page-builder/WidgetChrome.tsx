@@ -359,11 +359,13 @@ export function WidgetChrome({
     // (both widgets and layout components carry the attribute) and post
     // the pre-computed value to the admin.
     const sortOrder = computeDropSortOrder(zone);
+    const isGlobal = !!zone.closest('[data-evershop-global="true"]');
     postToParent({
       type: 'pb-drop',
       widgetType,
       area,
-      sortOrder
+      sortOrder,
+      isGlobal
     });
   };
 

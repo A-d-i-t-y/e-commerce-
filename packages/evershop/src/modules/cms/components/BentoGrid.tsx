@@ -1,4 +1,5 @@
 import { Image } from '@components/common/Image.js';
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 
 /**
@@ -100,47 +101,69 @@ function TileBackground({
           ? '(max-width: 768px) 100vw, 33vw'
           : '(max-width: 768px) 100vw, 22vw'
       }
-      className="absolute inset-0 h-full w-full"
+      className="evershop-bento-grid__image absolute inset-0 h-full w-full"
       style={{ aspectRatio: 'auto' }}
     />
   );
 }
 
-function TileContent({ tile, isHero }: { tile: BentoTile; isHero: boolean }) {
+function TileContent({
+  tile,
+  isHero,
+  originalIndex
+}: {
+  tile: BentoTile;
+  isHero: boolean;
+  originalIndex: number;
+}) {
   const textClass =
     tile.textColor === 'light' ? 'text-white' : 'text-foreground';
+  const base = `settings.tiles.${originalIndex}`;
   return (
     <div
-      className={`relative flex h-full flex-col justify-end gap-1 p-5 md:p-7 ${textClass}`}
+      className={`evershop-bento-grid__content relative flex h-full flex-col justify-end gap-1 p-5 md:p-7 ${textClass}`}
     >
       {/* Scrim for legibility when there's a background image */}
       {tile.image && (
         <div
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-0 ${
+          className={`evershop-bento-grid__overlay-tint pointer-events-none absolute inset-0 ${
             tile.textColor === 'light'
               ? 'bg-linear-to-t from-black/55 via-black/15 to-transparent'
               : 'bg-linear-to-t from-white/70 via-white/20 to-transparent'
           }`}
         />
       )}
-      <div className="relative">
+      <div className="evershop-bento-grid__copy relative">
         {isHero && tile.eyebrow && (
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest opacity-90">
+          <Editable
+            as="div"
+            fieldPath={`${base}.eyebrow`}
+            className="evershop-bento-grid__eyebrow mb-2 text-[11px] font-semibold uppercase tracking-widest opacity-90"
+          >
             {tile.eyebrow}
-          </div>
+          </Editable>
         )}
-        <div
-          className={`font-semibold ${
+        <Editable
+          as="div"
+          fieldPath={`${base}.heading`}
+          className={`evershop-bento-grid__heading font-semibold ${
             isHero ? 'text-xl md:text-2xl' : 'text-base'
           }`}
         >
           {tile.heading}
-        </div>
+        </Editable>
         {isHero && tile.body && (
-          <p className="mt-2 max-w-[24em] text-sm opacity-90">{tile.body}</p>
+          <Editable
+            as="p"
+            fieldPath={`${base}.body`}
+            multiline
+            className="evershop-bento-grid__body mt-2 max-w-[24em] text-sm opacity-90"
+          >
+            {tile.body}
+          </Editable>
         )}
-        <div className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-2">
+        <div className="evershop-bento-grid__cta mt-3 inline-flex items-center gap-2 text-sm font-medium underline underline-offset-2">
           {tile.link.label}
           <span aria-hidden="true">→</span>
         </div>
@@ -151,41 +174,49 @@ function TileContent({ tile, isHero }: { tile: BentoTile; isHero: boolean }) {
 
 export default function BentoGrid({ bentoGridWidget }: BentoGridProps) {
   const { tiles = [], gap, minHeight } = bentoGridWidget;
-  const safeTiles = (tiles ?? []).filter((t) => t && t.heading && t.link?.url);
-  if (safeTiles.length === 0) return null;
-  const hero = safeTiles[0];
-  const smalls = safeTiles.slice(1, 5);
+  // Track the source index alongside the filter so inline edits write back
+  // to `settings.tiles.${originalIndex}.{eyebrow|heading|body}`.
+  const enriched = (tiles ?? [])
+    .map((tile, originalIndex) => ({ tile, originalIndex }))
+    .filter(({ tile }) => tile && tile.heading && tile.link?.url);
+  if (enriched.length === 0) return null;
+  const hero = enriched[0];
+  const smalls = enriched.slice(1, 5);
   const totalSmall = smalls.length;
   const gapClass = GAP_CLASS[gap ?? 'md'];
 
   return (
     <div
-      className={`evershop-bento-grid grid grid-cols-1 md:grid-cols-3 ${gapClass} px-4 py-6`}
+      className={`evershop-bento-grid grid grid-cols-1 md:grid-cols-3 ${gapClass} py-6 md:py-10`}
     >
       {/* Hero */}
       <a
-        href={hero.link.url}
-        target={hero.link.newTab ? '_blank' : undefined}
-        rel={hero.link.newTab ? 'noopener noreferrer' : undefined}
-        aria-label={`${hero.heading} — ${hero.link.label}`}
-        className="group relative block overflow-hidden rounded-md md:col-span-1 md:row-span-2"
+        href={hero.tile.link.url}
+        target={hero.tile.link.newTab ? '_blank' : undefined}
+        rel={hero.tile.link.newTab ? 'noopener noreferrer' : undefined}
+        aria-label={`${hero.tile.heading} — ${hero.tile.link.label}`}
+        className="evershop-bento-grid__tile evershop-bento-grid__tile--hero group relative block overflow-hidden rounded-md md:col-span-1 md:row-span-2"
         style={{
-          backgroundColor: hero.backgroundColor,
+          backgroundColor: hero.tile.backgroundColor,
           minHeight
         }}
       >
-        <TileBackground tile={hero} isHero />
-        <TileContent tile={hero} isHero />
+        <TileBackground tile={hero.tile} isHero />
+        <TileContent
+          tile={hero.tile}
+          isHero
+          originalIndex={hero.originalIndex}
+        />
       </a>
       {/* Smalls */}
-      {smalls.map((tile, i) => (
+      {smalls.map(({ tile, originalIndex }, i) => (
         <a
           key={tile.id}
           href={tile.link.url}
           target={tile.link.newTab ? '_blank' : undefined}
           rel={tile.link.newTab ? 'noopener noreferrer' : undefined}
           aria-label={`${tile.heading} — ${tile.link.label}`}
-          className={`group relative block overflow-hidden rounded-md ${smallTileSpan(
+          className={`evershop-bento-grid__tile evershop-bento-grid__tile--small group relative block overflow-hidden rounded-md ${smallTileSpan(
             totalSmall,
             i
           )}`}
@@ -195,7 +226,11 @@ export default function BentoGrid({ bentoGridWidget }: BentoGridProps) {
           }}
         >
           <TileBackground tile={tile} isHero={false} />
-          <TileContent tile={tile} isHero={false} />
+          <TileContent
+            tile={tile}
+            isHero={false}
+            originalIndex={originalIndex}
+          />
         </a>
       ))}
     </div>

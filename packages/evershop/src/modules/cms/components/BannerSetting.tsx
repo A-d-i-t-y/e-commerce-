@@ -1,5 +1,14 @@
 /* eslint-disable jsx-a11y/img-redundant-alt */
 import { FileBrowser } from '@components/admin/FileBrowser.js';
+import {
+  AnchorPicker,
+  type ContentAnchor
+} from '@components/common/page-builder/drawer/AnchorPicker.js';
+import { Slider } from '@components/common/page-builder/drawer/index.js';
+import { CtaField } from '@components/common/page-builder/fields/CtaField.js';
+import type { CtaValue } from '@components/common/page-builder/fields/CtaField.js';
+import { ImagePickerField } from '@components/common/page-builder/fields/ImagePickerField.js';
+import { MarkdownBodyField } from '@components/common/page-builder/fields/MarkdownBodyField.js';
 import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
 import { Button } from '@components/common/ui/Button.js';
 import {
@@ -84,6 +93,8 @@ function Section({
 
 type AlignmentType = 'left' | 'center' | 'right';
 
+type OverlayTint = 'none' | 'dark' | 'light' | 'gradient';
+
 interface BannerSettingProps {
   // Optional: page-builder drawer mounts this without GraphQL props.
   bannerWidget?: {
@@ -93,8 +104,71 @@ interface BannerSettingProps {
     height?: number;
     alt?: string;
     link?: string;
+    eyebrow?: string | null;
+    heading?: string | null;
+    subText?: string | null;
+    contentPosition?: ContentAnchor | null;
+    overlayTint?: OverlayTint | null;
+    overlayOpacity?: number | null;
+    cta?: CtaValue | null;
+    cta2?: CtaValue | null;
+    mobileImage?: string | null;
+    mobileImageWidth?: number | null;
+    mobileImageHeight?: number | null;
   };
 }
+
+const TINT_OPTIONS: ReadonlyArray<{ value: OverlayTint; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
+  { value: 'gradient', label: 'Gradient' }
+];
+
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange
+}: {
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div
+      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-1"
+      role="radiogroup"
+    >
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(opt.value)}
+            className={`flex-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+              active
+                ? 'bg-card text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const BLANK_CTA: CtaValue = {
+  label: 'Shop now',
+  url: '/',
+  kind: 'custom',
+  newTab: false,
+  style: 'primary'
+};
 
 const ALIGNMENT_OPTIONS: ReadonlyArray<{
   value: AlignmentType;
@@ -121,13 +195,42 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
     width = 0,
     height = 0,
     alt = '',
-    link = undefined
+    link = undefined,
+    eyebrow = null,
+    heading = null,
+    subText = null,
+    contentPosition = 'mc',
+    overlayTint = 'none',
+    overlayOpacity = 0.3,
+    cta = null,
+    cta2 = null,
+    mobileImage = null,
+    mobileImageWidth = null,
+    mobileImageHeight = null
   } = bannerWidget ?? {};
 
   const { register, setValue, watch } = useScopedFormContext();
   const image = watch('settings.src', src) as string;
   const currentAlignment = (watch('settings.alignment', alignment) ??
     alignment) as AlignmentType;
+
+  // Overlay fields — all reactive via watch so the drawer mirrors the
+  // canvas on auto-save changes (e.g. inline-edit, undo/redo).
+  const eyebrowV = (watch('settings.eyebrow') as string) ?? eyebrow ?? '';
+  const headingV = (watch('settings.heading') as string) ?? heading ?? '';
+  const subTextV = (watch('settings.subText') as string) ?? subText ?? '';
+  const anchorV = ((watch('settings.contentPosition') as string) ??
+    contentPosition ??
+    'mc') as ContentAnchor;
+  const tintV = ((watch('settings.overlayTint') as string) ??
+    overlayTint ??
+    'none') as OverlayTint;
+  const opacityV =
+    (watch('settings.overlayOpacity') as number) ?? overlayOpacity ?? 0.3;
+  const ctaV = (watch('settings.cta') as CtaValue | null) ?? cta ?? null;
+  const cta2V = (watch('settings.cta2') as CtaValue | null) ?? cta2 ?? null;
+  const mobileImageV =
+    (watch('settings.mobileImage') as string) ?? mobileImage ?? '';
 
   const [openFileBrowser, setOpenFileBrowser] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({
@@ -152,7 +255,6 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
     if (image) {
       getImageDimensions(image);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image]);
 
   return (
@@ -267,13 +369,39 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
             )}
           </>
         )}
+
+        <Field
+          label="Mobile image"
+          hint="Optional. Swapped in below the 768px breakpoint. Falls back to the image above when empty — typical use is a portrait crop of the same scene."
+        >
+          <ImagePickerField
+            value={mobileImageV}
+            onChange={(next) => {
+              setValue('settings.mobileImage', next || null, {
+                shouldDirty: true
+              });
+              if (!next) {
+                setValue('settings.mobileImageWidth', null, {
+                  shouldDirty: true
+                });
+                setValue('settings.mobileImageHeight', null, {
+                  shouldDirty: true
+                });
+              }
+            }}
+            onLoadDimensions={({ width: mw, height: mh }) => {
+              setValue('settings.mobileImageWidth', mw, { shouldDirty: true });
+              setValue('settings.mobileImageHeight', mh, { shouldDirty: true });
+            }}
+          />
+        </Field>
       </Section>
 
       {/* Layout */}
       <Section title="Layout">
         <Field label="Alignment">
           <div
-            className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-0.5"
+            className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-1"
             role="radiogroup"
           >
             {ALIGNMENT_OPTIONS.map((opt) => {
@@ -286,7 +414,7 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
                   aria-checked={active}
                   title={opt.label}
                   onClick={() => setValue('settings.alignment', opt.value)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                  className={`flex flex-1 items-center justify-center gap-2 rounded px-2 py-1 text-xs font-medium transition-colors ${
                     active
                       ? 'bg-card text-foreground shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
@@ -301,6 +429,169 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
         </Field>
       </Section>
 
+      {/* Overlay copy — optional eyebrow / heading / sub-text. Banners
+          without any of these stay image-only (matches the original behaviour
+          byte-for-byte). */}
+      <Section title="Overlay copy">
+        <Field
+          label="Eyebrow"
+          hint='Small all-caps label above the heading. E.g. "LIMITED EDITION".'
+        >
+          <input
+            type="text"
+            value={eyebrowV}
+            onChange={(e) =>
+              setValue('settings.eyebrow', e.target.value || null, {
+                shouldDirty: true
+              })
+            }
+            placeholder="LIMITED EDITION"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </Field>
+        <Field label="Heading">
+          <input
+            type="text"
+            value={headingV}
+            onChange={(e) =>
+              setValue('settings.heading', e.target.value || null, {
+                shouldDirty: true
+              })
+            }
+            placeholder="The Summer Edit"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </Field>
+        <Field label="Sub-text">
+          <MarkdownBodyField
+            value={subTextV}
+            onChange={(v) =>
+              setValue('settings.subText', v || null, { shouldDirty: true })
+            }
+            placeholder="One short supporting sentence."
+            rows={2}
+            softLimit={160}
+          />
+        </Field>
+      </Section>
+
+      {/* Overlay placement — content position + tint scrim + opacity */}
+      <Section title="Overlay placement">
+        <Field
+          label="Content position"
+          hint="Where the overlay text sits on the image."
+        >
+          <AnchorPicker
+            value={anchorV}
+            onChange={(v) =>
+              setValue('settings.contentPosition', v, { shouldDirty: true })
+            }
+          />
+        </Field>
+        <Field
+          label="Tint"
+          hint="A scrim behind the overlay text for legibility. Dark / gradient flip the text to white automatically."
+        >
+          <Segmented<OverlayTint>
+            value={tintV}
+            options={TINT_OPTIONS}
+            onChange={(v) =>
+              setValue('settings.overlayTint', v, { shouldDirty: true })
+            }
+          />
+        </Field>
+        {tintV !== 'none' && (
+          <Field label="Tint opacity">
+            <Slider
+              value={Math.round(opacityV * 100)}
+              min={0}
+              max={100}
+              step={5}
+              unit="%"
+              onCommit={(v) =>
+                setValue('settings.overlayOpacity', v / 100, {
+                  shouldDirty: true
+                })
+              }
+            />
+          </Field>
+        )}
+      </Section>
+
+      {/* Call to actions — primary + optional secondary */}
+      <Section title="Call to actions">
+        {ctaV ? (
+          <>
+            <div className="text-[11px] font-semibold tracking-wide text-foreground/80">
+              Primary
+            </div>
+            <CtaField
+              value={ctaV}
+              onChange={(v) =>
+                setValue('settings.cta', v, { shouldDirty: true })
+              }
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setValue('settings.cta', null, { shouldDirty: true })
+              }
+              className="text-[11px] text-muted-foreground hover:text-destructive"
+            >
+              Remove primary CTA
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() =>
+              setValue('settings.cta', BLANK_CTA, { shouldDirty: true })
+            }
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            + Add a primary CTA
+          </button>
+        )}
+        {ctaV && cta2V && (
+          <>
+            <div className="mt-3 text-[11px] font-semibold tracking-wide text-foreground/80">
+              Secondary
+            </div>
+            <CtaField
+              value={cta2V}
+              onChange={(v) =>
+                setValue('settings.cta2', v, { shouldDirty: true })
+              }
+              showStyle
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setValue('settings.cta2', null, { shouldDirty: true })
+              }
+              className="text-[11px] text-muted-foreground hover:text-destructive"
+            >
+              Remove secondary CTA
+            </button>
+          </>
+        )}
+        {ctaV && !cta2V && (
+          <button
+            type="button"
+            onClick={() =>
+              setValue(
+                'settings.cta2',
+                { ...BLANK_CTA, label: 'Learn more', style: 'secondary' },
+                { shouldDirty: true }
+              )
+            }
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            + Add a secondary CTA
+          </button>
+        )}
+      </Section>
+
       {/* Details */}
       <Section title="Details">
         <Field
@@ -312,7 +603,7 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
             {...register('settings.alt')}
             defaultValue={alt}
             placeholder='e.g. "Summer sale promotional banner"'
-            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
         <Field
@@ -324,7 +615,7 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
             {...register('settings.link')}
             defaultValue={link ?? ''}
             placeholder="/c/sale or https://example.com"
-            className="w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
       </Section>
@@ -349,18 +640,57 @@ export default function BannerSetting({ bannerWidget }: BannerSettingProps) {
         {...register('settings.height', { valueAsNumber: true })}
         defaultValue={height || imageDimensions.height || 0}
       />
+      <input
+        type="hidden"
+        {...register('settings.mobileImage')}
+        defaultValue={mobileImage ?? ''}
+      />
+      <input
+        type="hidden"
+        {...register('settings.mobileImageWidth', { valueAsNumber: true })}
+        defaultValue={mobileImageWidth ?? 0}
+      />
+      <input
+        type="hidden"
+        {...register('settings.mobileImageHeight', { valueAsNumber: true })}
+        defaultValue={mobileImageHeight ?? 0}
+      />
     </div>
   );
 }
 
 export const query = `
-  query Query($src: String, $alignment: String, $width: Float, $height: Float, $alt: String) {
-    bannerWidget(src: $src, alignment: $alignment, width: $width, height: $height, alt: $alt) {
+  query Query(
+    $src: String
+    $alignment: String
+    $width: Float
+    $height: Float
+    $alt: String
+    $link: String
+    $mobileImage: String
+    $mobileImageWidth: Float
+    $mobileImageHeight: Float
+  ) {
+    bannerWidget(
+      src: $src
+      alignment: $alignment
+      width: $width
+      height: $height
+      alt: $alt
+      link: $link
+      mobileImage: $mobileImage
+      mobileImageWidth: $mobileImageWidth
+      mobileImageHeight: $mobileImageHeight
+    ) {
       src
       alignment
       width
       height
       alt
+      link
+      mobileImage
+      mobileImageWidth
+      mobileImageHeight
     }
   }
 `;
@@ -370,5 +700,9 @@ export const variables = `{
   alignment: getWidgetSetting("alignment"),
   width: getWidgetSetting("width"),
   height: getWidgetSetting("height"),
-  alt: getWidgetSetting("alt")
+  alt: getWidgetSetting("alt"),
+  link: getWidgetSetting("link"),
+  mobileImage: getWidgetSetting("mobileImage"),
+  mobileImageWidth: getWidgetSetting("mobileImageWidth"),
+  mobileImageHeight: getWidgetSetting("mobileImageHeight")
 }`;

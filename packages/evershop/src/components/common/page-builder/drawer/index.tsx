@@ -104,10 +104,10 @@ export function Segmented<T extends string | number>({
   onChange: (v: T) => void;
   size?: 'sm' | 'md';
 }) {
-  const padding = size === 'md' ? 'px-3 py-1.5 text-sm' : 'px-2 py-1 text-xs';
+  const padding = size === 'md' ? 'px-3 py-2 text-sm' : 'px-2 py-1 text-xs';
   return (
     <div
-      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-0.5"
+      className="inline-flex w-full rounded-md border border-divider bg-muted/30 p-1"
       role="radiogroup"
     >
       {options.map((opt) => {
@@ -120,7 +120,7 @@ export function Segmented<T extends string | number>({
             aria-checked={active}
             title={opt.title ?? opt.label}
             onClick={() => onChange(opt.value)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded font-medium transition-colors ${padding} ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded font-medium transition-colors ${padding} ${
               active
                 ? 'bg-card text-foreground shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
@@ -222,7 +222,7 @@ export function Toggle({
 // ---------------------------------------------------------------------------
 
 export const drawerInputClass =
-  'w-full rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary';
+  'w-full rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary';
 
 export const drawerTextareaClass =
-  'w-full resize-vertical rounded-md border border-divider bg-card px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary';
+  'w-full resize-vertical rounded-md border border-divider bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary';

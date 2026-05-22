@@ -4,12 +4,13 @@ import React from 'react';
 export default function CollectionSpotlightPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-collection-spotlight__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: '1fr 1.4fr',
-        gap: 6,
+        gap: 8,
         height: 130
       }}
     >

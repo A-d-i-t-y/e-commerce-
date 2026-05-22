@@ -1,4 +1,5 @@
 import { Image } from '@components/common/Image.js';
+import { Editable } from '@components/common/page-builder/index.js';
 import React from 'react';
 
 /**
@@ -52,10 +53,17 @@ export default function TrustStrip({ trustStripWidget }: TrustStripProps) {
     divider
   } = trustStripWidget;
 
-  const visibleItems = items.filter(Boolean);
+  // Preserve original settings index so inline edits land at
+  // `settings.items.${originalIndex}.{title|description}`.
+  const visibleItems = items
+    .map((item, originalIndex) => ({ item, originalIndex }))
+    .filter(({ item }) => Boolean(item));
   if (visibleItems.length === 0) return null;
 
-  const cols = effectiveColumns(visibleItems, columns);
+  const cols = effectiveColumns(
+    visibleItems.map(({ item }) => item),
+    columns
+  );
   const align: TrustAlignment = alignment ?? 'center';
   const showIconsResolved = showIcons ?? true;
   const iconSizeResolved: TrustIconSize = iconSize ?? 'md';
@@ -66,12 +74,12 @@ export default function TrustStrip({ trustStripWidget }: TrustStripProps) {
 
   return (
     <div
-      className="evershop-trust-strip grid gap-4 sm:gap-6"
+      className="evershop-trust-strip grid gap-4 py-6 sm:gap-6 md:py-10"
       style={{
         gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`
       }}
     >
-      {visibleItems.map((item, i) => {
+      {visibleItems.map(({ item, originalIndex }, i) => {
         const Tag: React.ElementType = item.link ? 'a' : 'div';
         const linkAttrs = item.link
           ? {
@@ -82,13 +90,14 @@ export default function TrustStrip({ trustStripWidget }: TrustStripProps) {
           : {};
         const showIcon = showIconsResolved && item.icon;
         const showRightDivider = showDivider && i < visibleItems.length - 1;
+        const itemBase = `settings.items.${originalIndex}`;
         return (
           <Tag
             key={item.id}
             {...linkAttrs}
-            className={`flex flex-col gap-1 ${alignClass} ${
+            className={`evershop-trust-strip__item flex flex-col gap-1 ${alignClass} ${
               item.link ? 'transition-colors hover:text-primary' : ''
-            } ${showRightDivider ? 'sm:border-r sm:border-divider sm:pr-4' : ''}`}
+            } ${showRightDivider ? 'evershop-trust-strip__item--with-divider sm:border-r sm:border-divider sm:pr-4' : ''}`}
           >
             {showIcon && (
               <Image
@@ -109,6 +118,7 @@ export default function TrustStrip({ trustStripWidget }: TrustStripProps) {
                 }
                 objectFit="contain"
                 sizes={`${ICON_PX[iconSizeResolved]}px`}
+                className="evershop-trust-strip__icon"
                 style={{
                   width: ICON_PX[iconSizeResolved],
                   height: ICON_PX[iconSizeResolved],
@@ -116,11 +126,22 @@ export default function TrustStrip({ trustStripWidget }: TrustStripProps) {
                 }}
               />
             )}
-            <div className="text-sm font-semibold">{item.title}</div>
+            <Editable
+              as="div"
+              fieldPath={`${itemBase}.title`}
+              className="evershop-trust-strip__heading text-sm font-semibold"
+            >
+              {item.title}
+            </Editable>
             {item.description && (
-              <div className="text-xs text-muted-foreground">
+              <Editable
+                as="div"
+                fieldPath={`${itemBase}.description`}
+                multiline
+                className="evershop-trust-strip__body text-xs text-muted-foreground"
+              >
                 {item.description}
-              </div>
+              </Editable>
             )}
           </Tag>
         );
@@ -132,7 +153,7 @@ export default function TrustStrip({ trustStripWidget }: TrustStripProps) {
 export const query = `
   query Query(
     $items: [TrustItemInput]
-    $columns: Float
+    $columns: Int
     $showIcons: Boolean
     $iconSize: String
     $alignment: String

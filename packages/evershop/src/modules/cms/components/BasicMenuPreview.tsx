@@ -9,6 +9,7 @@ const ITEM_WIDTHS = [48, 64, 56, 72, 52];
 export default function BasicMenuPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-basic-menu__preview"
       style={{
         padding: '24px 20px',
         background: '#ffffff',
@@ -21,6 +22,7 @@ export default function BasicMenuPreview(): React.ReactElement {
       {ITEM_WIDTHS.map((w, i) => (
         <span
           key={i}
+          className="evershop-basic-menu__preview-item"
           style={{
             width: w,
             height: 10,

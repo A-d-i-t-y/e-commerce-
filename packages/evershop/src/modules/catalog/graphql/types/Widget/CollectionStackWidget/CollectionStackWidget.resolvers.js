@@ -1,5 +1,6 @@
 import { select } from '@evershop/postgres-query-builder';
 import { camelCase } from '../../../../../../lib/util/camelCase.js';
+import { resolveLink } from '../../../../../../lib/widget/linkResolver.js';
 import { getProductsByCollectionBaseQuery } from '../../../../services/getProductsByCollectionBaseQuery.js';
 import { ProductCollection } from '../../../../services/ProductCollection.js';
 
@@ -18,7 +19,7 @@ export default {
     collectionStackWidget: async (
       _,
       { collections, productCount, showPrice, divider },
-      { pool, user }
+      { pool, user, linkLoaders }
     ) => {
       const pcNum = Math.round(Number(productCount));
       const safeProductCount =
@@ -46,11 +47,16 @@ export default {
             );
             const itemsResult = await productList.items();
             const items = Array.isArray(itemsResult) ? itemsResult : [];
+            // resolveLink: URN → current URL via per-request batched loader;
+            // plain URL passthrough.
+            const viewAllLink = row.viewAllLink
+              ? await resolveLink(row.viewAllLink, linkLoaders)
+              : null;
             return {
               id: row.id || row.source,
               title: row.title,
               source: row.source,
-              viewAllLink: row.viewAllLink || null,
+              viewAllLink: viewAllLink || null,
               viewAllLabel: row.viewAllLabel || 'View all →',
               products: items.map(camelCase)
             };

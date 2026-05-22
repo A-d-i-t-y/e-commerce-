@@ -130,7 +130,7 @@ export function RepeatableAccordion<T extends RepeatableItem>({
                   : 'border-divider'
               } ${hidden ? 'opacity-60' : ''}`}
             >
-              <div className="flex items-center gap-1.5 px-2 py-1.5">
+              <div className="flex items-center gap-2 px-2 py-2">
                 <div
                   className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
                   title="Drag to reorder"
@@ -152,7 +152,7 @@ export function RepeatableAccordion<T extends RepeatableItem>({
                     {renderHeader({ item, index, isOpen })}
                   </div>
                 </button>
-                <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-1">
                   {onToggleHidden && (
                     <button
                       type="button"
@@ -198,7 +198,7 @@ export function RepeatableAccordion<T extends RepeatableItem>({
           disabled={items.length >= maxItems}
           className="w-full justify-center"
         >
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          <Plus className="mr-2 h-3.5 w-3.5" />
           {addLabel}
         </Button>
       )}

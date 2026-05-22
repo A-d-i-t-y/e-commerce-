@@ -4,8 +4,9 @@ import React from 'react';
 export default function CategoryMosaicPreview(): React.ReactElement {
   return (
     <div
+      className="evershop-category-mosaic__preview"
       style={{
-        padding: 14,
+        padding: 16,
         background: '#ffffff',
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
@@ -16,6 +17,7 @@ export default function CategoryMosaicPreview(): React.ReactElement {
       {[0, 1, 2].map((i) => (
         <div
           key={i}
+          className="evershop-category-mosaic__preview-tile"
           style={{
             background:
               'repeating-linear-gradient(135deg, #f5efe2 0 4px, #ebe5d8 4px 8px)',
