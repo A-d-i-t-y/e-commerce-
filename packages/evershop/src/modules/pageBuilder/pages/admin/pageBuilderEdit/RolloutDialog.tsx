@@ -60,6 +60,13 @@ interface FieldErrors {
   startTime?: string;
   endTime?: string;
   overlap?: string;
+  /**
+   * Names of existing plans whose active windows overlap the proposed
+   * window. Populated alongside `overlap` so the UI can render the
+   * conflicting plan(s) directly in the status badge / detail area
+   * without re-parsing the message string.
+   */
+  overlapPlans?: ReadonlyArray<string>;
 }
 
 function fmtRange(startAt: string, endAt: string): string {
@@ -143,6 +150,7 @@ function validate(
       errors.overlap = `Overlaps with existing rollout${
         conflicts.length === 1 ? '' : 's'
       }: ${conflicts.join(', ')}.`;
+      errors.overlapPlans = conflicts;
     }
   }
 
@@ -222,7 +230,12 @@ export function RolloutDialog({
   );
   const isValid = Object.keys(errors).length === 0;
 
-  const showError = (key: keyof FieldErrors): string | undefined => {
+  // String-valued error keys. `overlapPlans` is a sibling array that
+  // carries the same overlap info in structured form for the badge UI;
+  // showError stays text-only so the existing JSX `{showError(...)}`
+  // call sites keep their string contract.
+  type ErrorMessageKey = 'name' | 'startTime' | 'endTime' | 'overlap';
+  const showError = (key: ErrorMessageKey): string | undefined => {
     // Overlap is a cross-field/form-level error. The user has clearly
     // entered enough data to evaluate a conflict; gating it on `touched`
     // hides the most useful message for the wrong reason. Surface as soon
@@ -236,6 +249,26 @@ export function RolloutDialog({
   };
 
   const willBeDraft = !startAt;
+
+  // Badge label reflects the actual error so the merchant can act on it
+  // immediately. "Has conflicts" is reserved for real overlap with other
+  // plans; structural errors (missing name, end ≤ start, etc.) get their
+  // own labels instead of being miscategorised as conflicts.
+  const statusBadgeLabel: string = (() => {
+    if (errors.overlap && (errors.overlapPlans?.length ?? 0) > 0) {
+      const planNames = errors.overlapPlans!;
+      if (planNames.length === 1) return `Conflicts with ${planNames[0]}`;
+      if (planNames.length === 2)
+        return `Conflicts with ${planNames[0]}, ${planNames[1]}`;
+      return `Conflicts with ${planNames[0]} +${planNames.length - 1}`;
+    }
+    if (errors.endTime) return 'Invalid window';
+    if (errors.startTime) return 'Invalid start';
+    if (errors.name) return 'Missing name';
+    // Defensive — shouldn't reach here when isValid is false but the
+    // errors map is somehow empty. Keep the original generic label.
+    return 'Has conflicts';
+  })();
 
   const handleSave = () => {
     setSubmitAttempted(true);
@@ -351,27 +384,52 @@ export function RolloutDialog({
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {willBeDraft ? (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-muted/50 text-muted-foreground">
-              Pending start time
+        <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2">
+            {willBeDraft ? (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted/50 text-muted-foreground">
+                Pending start time
+              </span>
+            ) : (
+              <span
+                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                  isValid
+                    ? 'bg-primary/15 text-primary'
+                    : 'bg-destructive/15 text-destructive'
+                }`}
+              >
+                {isValid ? 'Scheduled' : statusBadgeLabel}
+              </span>
+            )}
+            <span>
+              {willBeDraft
+                ? 'Set a start time to schedule.'
+                : `Will roll out automatically: ${fmtRange(startAt, endAt)}`}
             </span>
-          ) : (
-            <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                isValid
-                  ? 'bg-primary/15 text-primary'
-                  : 'bg-destructive/15 text-destructive'
-              }`}
-            >
-              {isValid ? 'Scheduled' : 'Has conflicts'}
-            </span>
+          </div>
+          {/* When the proposed window overlaps existing plans, render each
+              conflicting plan as a chip right under the badge so the merchant
+              can see *which* plan(s) collide without scanning the form. The
+              same names also appear in the inline overlap error above —
+              kept in both places because each is visible in different
+              scenarios (the inline message can scroll out of view in long
+              forms; the chips stay anchored to the status row). */}
+          {!isValid && !willBeDraft && (errors.overlapPlans?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-muted-foreground">
+                Conflicts with:
+              </span>
+              {errors.overlapPlans!.map((planName) => (
+                <span
+                  key={planName}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-destructive/10 text-destructive text-[11px] font-medium"
+                  title={`Existing rollout plan: ${planName}`}
+                >
+                  {planName}
+                </span>
+              ))}
+            </div>
           )}
-          <span>
-            {willBeDraft
-              ? 'Set a start time to schedule.'
-              : `Will roll out automatically: ${fmtRange(startAt, endAt)}`}
-          </span>
         </div>
 
         <DialogFooter>
