@@ -31,3 +31,5 @@ cypress
 mysqlToPostgres.js
 /docs
 extensions
+/wiki
+/CLAUDE.md

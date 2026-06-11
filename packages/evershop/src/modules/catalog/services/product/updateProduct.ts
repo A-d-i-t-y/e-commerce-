@@ -284,8 +284,15 @@ async function updateProductImages(images: string[] | undefined, productId: numb
 }
 
 async function updateProductData(uuid: string, data: ProductData, connection: PoolClient): Promise<ProductRow & ProductDescriptionRow & { updatedId?: number }> {
-  // If no_shipping_required is true, set weight to 0
-  const productData = { ...data, weight: data.no_shipping_required ? 0 : data.weight };
+  // If no_shipping_required is true, set weight to 0 and drop the package —
+  // virtual products have no parcel. (Only force package_id when the payload
+  // actually flips the product to virtual; a partial update without
+  // no_shipping_required must not null an existing package.)
+  const productData = {
+    ...data,
+    weight: data.no_shipping_required ? 0 : data.weight,
+    ...(data.no_shipping_required ? { package_id: null } : {})
+  };
   const query = select().from('product');
   query
     .leftJoin('product_description')
@@ -323,6 +330,20 @@ async function updateProductData(uuid: string, data: ProductData, connection: Po
     }
   }
 
+  // A package (parcel size) is mandatory for SHIPPABLE products — checked on
+  // the FINAL state (post-update row), so legacy products (package_id NULL
+  // from before the feature) must pick a package on their next edit, and a
+  // product flipped from virtual to shippable must pick one in the same save.
+  // The whole update runs in a transaction, so throwing here rolls back.
+  // See wiki/package-management-design.md.
+  const effectiveProduct = newProduct ?? product;
+  if (
+    !effectiveProduct.no_shipping_required &&
+    effectiveProduct.package_id === null
+  ) {
+    throw new Error('A package is required for shippable products');
+  }
+
   // Update product category and tax class to all products in same variant group
   if (product.variant_group_id) {
     const sharedData: Record<string, any> = {};
@@ -335,6 +356,20 @@ async function updateProductData(uuid: string, data: ProductData, connection: Po
     if (newProduct.no_shipping_required !== product.no_shipping_required) {
       sharedData.no_shipping_required = newProduct.no_shipping_required;
       sharedData.weight = newProduct.weight;
+    }
+    // Variants are SIBLINGS (no parent/child) and a variant group ships in
+    // one box — all members share one package_id. Whichever member is saved
+    // propagates its package to the whole group (same transaction), so two
+    // members can never durably disagree. Editing any one member also
+    // un-legacies the entire group.
+    //
+    // Propagate on EVERY save, not only when the saved member's package
+    // changed — siblings can drift (a product that joined the group with no
+    // package, a legacy member), and re-saving any member must repair the
+    // group. Never push NULL (only virtual members can hold it after
+    // validation) over siblings.
+    if (newProduct.package_id !== null && newProduct.package_id !== undefined) {
+      sharedData.package_id = newProduct.package_id;
     }
     const sharedVariantData = getValueSync<Record<string, any>>(
       'sharedVariantProductDataOnUpdate',

@@ -48,10 +48,13 @@ import type {
   SessionRow,
   SettingRow,
   ShipmentRow,
-  ShippingMethodRow,
+  ShipmentItemRow,
   ShippingZoneRow,
-  ShippingZoneMethodRow,
   ShippingZoneProvinceRow,
+  ShippingZoneCountryRow,
+  ShippingZoneProviderRow,
+  CoreShippingMethodRow,
+  CoreShippingMethodRateRow,
   TaxClassRow,
   TaxRateRow,
   UrlRewriteRow,
@@ -99,10 +102,13 @@ export type TableName =
   | 'session'
   | 'setting'
   | 'shipment'
-  | 'shipping_method'
+  | 'shipment_item'
   | 'shipping_zone'
-  | 'shipping_zone_method'
   | 'shipping_zone_province'
+  | 'shipping_zone_country'
+  | 'shipping_zone_provider'
+  | 'core_shipping_method'
+  | 'core_shipping_method_rate'
   | 'tax_class'
   | 'tax_rate'
   | 'url_rewrite'
@@ -150,10 +156,13 @@ type TableColumnMap = {
   session: keyof SessionRow;
   setting: keyof SettingRow;
   shipment: keyof ShipmentRow;
-  shipping_method: keyof ShippingMethodRow;
+  shipment_item: keyof ShipmentItemRow;
   shipping_zone: keyof ShippingZoneRow;
-  shipping_zone_method: keyof ShippingZoneMethodRow;
   shipping_zone_province: keyof ShippingZoneProvinceRow;
+  shipping_zone_country: keyof ShippingZoneCountryRow;
+  shipping_zone_provider: keyof ShippingZoneProviderRow;
+  core_shipping_method: keyof CoreShippingMethodRow;
+  core_shipping_method_rate: keyof CoreShippingMethodRateRow;
   tax_class: keyof TaxClassRow;
   tax_rate: keyof TaxRateRow;
   url_rewrite: keyof UrlRewriteRow;
@@ -209,10 +218,13 @@ type TableRowMap = {
   session: SessionRow;
   setting: SettingRow;
   shipment: ShipmentRow;
-  shipping_method: ShippingMethodRow;
+  shipment_item: ShipmentItemRow;
   shipping_zone: ShippingZoneRow;
-  shipping_zone_method: ShippingZoneMethodRow;
   shipping_zone_province: ShippingZoneProvinceRow;
+  shipping_zone_country: ShippingZoneCountryRow;
+  shipping_zone_provider: ShippingZoneProviderRow;
+  core_shipping_method: CoreShippingMethodRow;
+  core_shipping_method_rate: CoreShippingMethodRateRow;
   tax_class: TaxClassRow;
   tax_rate: TaxRateRow;
   url_rewrite: UrlRewriteRow;

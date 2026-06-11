@@ -66,11 +66,11 @@ const initialValidators: Validator<Cart>[] = [
       if (cart.getData('no_shipping_required')) {
         return true;
       }
-      if (!cart.getData('shipping_method')) {
-        return false;
-      } else {
-        return true;
-      }
+      const data = cart.getData('shipping_method_data') as
+        | { method_code?: string }
+        | null
+        | undefined;
+      return Boolean(data?.method_code);
     },
     errorMessage: 'Shipping method is required'
   }

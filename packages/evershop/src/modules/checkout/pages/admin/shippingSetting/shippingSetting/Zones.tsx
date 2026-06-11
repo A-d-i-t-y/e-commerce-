@@ -7,78 +7,47 @@ import {
 } from '@components/common/ui/Dialog.js';
 import React from 'react';
 import { useQuery } from 'urql';
-import { Zone } from './Zone.js';
+import { Zone, ShippingZone } from './Zone.js';
 import { ZoneForm } from './ZoneForm.js';
-
-export interface ShippingCountry {
-  label: string;
-  value: string;
-  provinces: Array<{
-    label: string;
-    value: string;
-  }>;
-}
 
 const ZonesQuery = `
   query Zones {
     shippingZones {
       uuid
       name
-      country {
+      countries {
         name
         code
       }
       provinces {
         name
         code
+        countryCode
       }
-      methods {
-        methodId
+      providers {
+        shippingZoneProviderId
         uuid
-        name
-        cost {
-          text
-          value
-        }
-        priceBasedCost {
-          minPrice {
-            value
-            text
-          }
-          cost {
-            value
-            text
-          }
-        }
-        weightBasedCost {
-          minWeight {
-            value
-            text
-          }
-          cost {
-            value
-            text
-          }
-        }
         isEnabled
-        conditionType
-        calculateApi
-        max
-        min
-        updateApi
-        deleteApi
+        sortOrder
+        config
+        provider {
+          code
+          name
+          description
+          zoneConfigSchema
+        }
       }
       updateApi
       deleteApi
-      addMethodApi
     }
+    createShippingZoneApi: url(routeId: "createShippingZone")
   }
 `;
 
 export function Zones({
-  createShippingZoneApi
+  createShippingZoneApi: createShippingZoneApiProp
 }: {
-  createShippingZoneApi: string;
+  createShippingZoneApi?: string;
 }) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [{ data, fetching, error }, reexecuteQuery] = useQuery({
@@ -88,14 +57,15 @@ export function Zones({
 
   if (fetching) return <Spinner width={'2rem'} height={'2rem'} />;
   if (error) return <div className="text-destructive">Error loading zones</div>;
-
   if (!data || !data.shippingZones) return <div>No zones found</div>;
-  const reload = () => {
-    reexecuteQuery({ requestPolicy: 'network-only' });
-  };
+
+  const reload = () => reexecuteQuery({ requestPolicy: 'network-only' });
+  const createShippingZoneApi =
+    createShippingZoneApiProp ?? data.createShippingZoneApi;
+
   return (
     <>
-      {data.shippingZones.map((zone) => (
+      {data.shippingZones.map((zone: ShippingZone) => (
         <Zone zone={zone} reload={reload} key={zone.uuid} />
       ))}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -6,6 +6,7 @@ import {
   CardTitle
 } from '@components/common/ui/Card.js';
 import React from 'react';
+import { Packages } from './shippingSetting/Packages.js';
 import { Zones } from './shippingSetting/Zones.js';
 
 export default function ShippingSetting({
@@ -28,6 +29,17 @@ export default function ShippingSetting({
               </CardDescription>
             </CardHeader>
             <Zones createShippingZoneApi={createShippingZoneApi} />
+          </Card>
+          <Card className="mt-5">
+            <CardHeader>
+              <CardTitle>Packages</CardTitle>
+              <CardDescription>
+                The boxes and envelopes you ship with. Every shippable product
+                references one — its dimensions and empty weight drive
+                shipping quotes and labels.
+              </CardDescription>
+            </CardHeader>
+            <Packages />
           </Card>
         </div>
       </div>

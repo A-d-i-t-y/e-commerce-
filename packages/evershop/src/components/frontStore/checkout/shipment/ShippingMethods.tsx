@@ -24,7 +24,16 @@ import React from 'react';
 
 interface ShippingMethod {
   code: string;
+  /**
+   * Provider code (e.g., 'core', 'usps'). Threaded through to
+   * `addShippingMethod` so the server can call the right provider's
+   * validateMethod. Optional at the type level for back-compat with cached
+   * availableShippingMethods data that pre-dates phase 4.
+   */
+  providerCode?: string;
   name: string;
+  /** Carrier display name (e.g., 'USPS'). Themes can render it next to name. */
+  carrier?: string;
   cost?: {
     value: number;
     text: string;

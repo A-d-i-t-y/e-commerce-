@@ -143,9 +143,14 @@ export interface CartRow {
   tax_amount_before_discount: string;
   shipping_tax_amount: string;
   grand_total: string;
-  shipping_method: string | null;
-  shipping_method_name: string | null;
-  shipping_zone_id: number | null;
+  /**
+   * Structured shipping selection. Shape:
+   *   { provider_code, method_code, snapshot, fingerprint?, quotedAt? }
+   * Always set via the `setShippingMethod(cart, intent)` service, never
+   * directly via `setData('shipping_method_data', ...)`. See
+   * services/setShippingMethod.ts and types/shippingMethodData.ts.
+   */
+  shipping_method_data: Record<string, unknown> | null;
   shipping_address_id: number | null;
   payment_method: string | null;
   payment_method_name: string | null;
@@ -201,6 +206,13 @@ export interface CartItemRow {
   product_name: string;
   thumbnail: string | null;
   product_weight: string | null;
+  /** Package (parcel) snapshot — refreshed from the product's package on
+   *  cart rebuild. Dims in shop.dimensionUnit; package_weight = TARE in
+   *  shop.weightUnit. NULL for legacy/virtual products. */
+  package_length: string | null;
+  package_width: string | null;
+  package_height: string | null;
+  package_weight: string | null;
   product_price: string;
   product_price_incl_tax: string;
   qty: number;
@@ -505,8 +517,12 @@ export interface OrderRow {
   shipping_tax_amount: string;
   shipping_note: string | null;
   grand_total: string;
-  shipping_method: string | null;
-  shipping_method_name: string | null;
+  /**
+   * Structured shipping selection snapshot. Same shape as CartRow.shipping_method_data.
+   * Backfilled from the legacy varchar columns in Version-1.0.8 migration; new
+   * orders write this directly.
+   */
+  shipping_method_data: Record<string, unknown> | null;
   shipping_address_id: number | null;
   payment_method: string | null;
   payment_method_name: string | null;
@@ -587,6 +603,13 @@ export interface OrderItemRow {
   product_name: string;
   thumbnail: string | null;
   product_weight: string | null;
+  /** Package (parcel) snapshot, frozen at placement (copied from cart_item).
+   *  Dims in shop.dimensionUnit; package_weight = TARE in shop.weightUnit.
+   *  NULL for legacy/virtual products. */
+  package_length: string | null;
+  package_width: string | null;
+  package_height: string | null;
+  package_weight: string | null;
   product_price: string;
   product_price_incl_tax: string;
   qty: number;
@@ -649,6 +672,10 @@ export interface ProductRow {
   sku: string;
   price: string;
   weight: string | null;
+  /** Reference to the `package` table (parcel size). Mandatory for shippable
+   *  products at save time; NULL for legacy/virtual products. Variant groups
+   *  share one package. */
+  package_id: number | null;
   tax_class: number | null;
   status: boolean;
   created_at: Date;
@@ -882,6 +909,55 @@ export interface ShipmentRow {
   shipment_order_id: number;
   carrier: string | null;
   tracking_number: string | null;
+  /**
+   * Registered status code (e.g. 'pending', 'shipped', 'delivered', 'canceled',
+   * or any extension-registered code). Phase is derived at read time from the
+   * status registration — `getShipmentStatusList()[row.status].phase`.
+   */
+  status: string;
+  /** First-occurrence timestamp; set when the shipment first enters the `shipped` phase. */
+  shipped_at: Date | null;
+  /** First-occurrence timestamp; set when the shipment first enters the `delivered` phase. */
+  delivered_at: Date | null;
+  /** First-occurrence timestamp; set when the shipment first enters the `canceled` phase. */
+  canceled_at: Date | null;
+  /**
+   * Carrier-hosted label URL set after a successful `createLabel` purchase.
+   * Stored as a URL (never the binary). Null when admin chose "I already have
+   * a tracking number" or when no label has been generated yet.
+   */
+  label_url: string | null;
+  /**
+   * Label file MIME — e.g. `application/pdf`, `image/png`, `application/zpl`.
+   * Populated by the carrier provider alongside `label_url`.
+   */
+  label_format: string | null;
+  /**
+   * Carrier's internal id for the shipment from `LabelResult.carrierShipmentId`
+   * (e.g. UPS's `ShipmentIdentificationNumber`). Distinct from the
+   * customer-visible `tracking_number` — UPS requires it to void or query
+   * the shipment, and the tracking number alone is not enough. Passed back
+   * to the carrier via `CarrierMethodContext.carrierShipmentId`. Null when
+   * the carrier doesn't return one (regional couriers, "Custom / Other").
+   */
+  carrier_shipment_id: string | null;
+  /**
+   * Aggregator-extension blob from `LabelResult.metadata`. Shippo / EasyPost
+   * use this to record `{ underlyingCarrier, rateId, ... }` so subsequent
+   * calls (`fetchStatus`, `voidLabel`, `generateTrackingUrl`) can route
+   * without a private side table. Opaque to core; passed back verbatim via
+   * `CarrierMethodContext.metadata`. Null when the carrier didn't write any.
+   */
+  carrier_metadata: Record<string, unknown> | null;
+  /**
+   * Public tracking URL handed back by the carrier at label-purchase time
+   * (Shippo's `tracking_url_provider`, EasyPost's `public_url`). Set from
+   * `LabelResult.trackingUrl` inside `createShipment`. The
+   * `Shipment.trackingUrl` resolver returns this verbatim when set;
+   * otherwise it falls through to `Carrier.generateTrackingUrl(ctx)`.
+   * Null for single-carrier extensions that compose the URL on the fly.
+   */
+  tracking_url: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -893,21 +969,32 @@ export type ShipmentInsert = Omit<
 export type ShipmentUpdate = Partial<Omit<ShipmentRow, 'shipment_id'>>;
 
 // =============================================================================
-// SHIPPING METHOD
+// SHIPMENT ITEM
 // =============================================================================
 
-export interface ShippingMethodRow {
-  shipping_method_id: number;
+/**
+ * Junction row binding a shipment to one of its order's items, with the qty
+ * being shipped in that shipment. UNIQUE on (shipment_id, order_item_id) — one
+ * row per pair. Digital items (`order_item.no_shipping_required = true`) never
+ * appear here.
+ *
+ * See wiki/multi-shipment-design.md → "Schema" → "New table".
+ */
+export interface ShipmentItemRow {
+  shipment_item_id: number;
   uuid: string;
-  name: string;
+  shipment_id: number;
+  order_item_id: number;
+  qty: number;
+  created_at: Date;
 }
 
-export type ShippingMethodInsert = Omit<
-  ShippingMethodRow,
-  'shipping_method_id' | 'uuid'
+export type ShipmentItemInsert = Omit<
+  ShipmentItemRow,
+  'shipment_item_id' | 'uuid' | 'created_at'
 >;
-export type ShippingMethodUpdate = Partial<
-  Omit<ShippingMethodRow, 'shipping_method_id'>
+export type ShipmentItemUpdate = Partial<
+  Omit<ShipmentItemRow, 'shipment_item_id'>
 >;
 
 // =============================================================================
@@ -918,7 +1005,6 @@ export interface ShippingZoneRow {
   shipping_zone_id: number;
   uuid: string;
   name: string;
-  country: string;
 }
 
 export type ShippingZoneInsert = Omit<
@@ -930,32 +1016,6 @@ export type ShippingZoneUpdate = Partial<
 >;
 
 // =============================================================================
-// SHIPPING ZONE METHOD
-// =============================================================================
-
-export interface ShippingZoneMethodRow {
-  shipping_zone_method_id: number;
-  method_id: number;
-  zone_id: number;
-  is_enabled: boolean;
-  cost: string | null;
-  calculate_api: string | null;
-  condition_type: string | null;
-  max: string | null;
-  min: string | null;
-  price_based_cost: Record<string, unknown> | null;
-  weight_based_cost: Record<string, unknown> | null;
-}
-
-export type ShippingZoneMethodInsert = Omit<
-  ShippingZoneMethodRow,
-  'shipping_zone_method_id'
->;
-export type ShippingZoneMethodUpdate = Partial<
-  Omit<ShippingZoneMethodRow, 'shipping_zone_method_id'>
->;
-
-// =============================================================================
 // SHIPPING ZONE PROVINCE
 // =============================================================================
 
@@ -963,6 +1023,12 @@ export interface ShippingZoneProvinceRow {
   shipping_zone_province_id: number;
   uuid: string;
   zone_id: number;
+  /**
+   * ISO country code. Added in Version-1.0.8 so province codes disambiguate
+   * when a zone covers multiple countries (e.g., "CA" → California in US,
+   * Catalonia in ES). Backfilled from each row's parent zone.
+   */
+  country: string;
   province: string;
 }
 
@@ -972,6 +1038,121 @@ export type ShippingZoneProvinceInsert = Omit<
 >;
 export type ShippingZoneProvinceUpdate = Partial<
   Omit<ShippingZoneProvinceRow, 'shipping_zone_province_id'>
+>;
+
+// =============================================================================
+// SHIPPING ZONE PROVIDER (platform-level — zone→registered-provider attachment)
+// =============================================================================
+//
+// There is no `shipping_provider` row type. Provider definitions live in the
+// in-memory registry (`services/shipping/registry.ts`), populated at bootstrap
+// by every provider extension's `registerShippingProvider(...)` call. The
+// attachment row references the registry by `provider_code` — a soft string
+// reference, not a FK. Orphan attachments to uninstalled providers are
+// filtered at checkout via `getShippingProvider(code)` returning undefined.
+
+export interface ShippingZoneProviderRow {
+  shipping_zone_provider_id: number;
+  uuid: string;
+  zone_id: number;
+  /** Soft reference to a registered provider's `Carrier`-like `code`. */
+  provider_code: string;
+  is_enabled: boolean;
+  /** Per-zone provider config; shape declared by provider.zoneConfigSchema. */
+  config: Record<string, unknown>;
+  sort_order: number;
+}
+
+export type ShippingZoneProviderInsert = Omit<
+  ShippingZoneProviderRow,
+  'shipping_zone_provider_id' | 'uuid'
+>;
+export type ShippingZoneProviderUpdate = Partial<
+  Omit<ShippingZoneProviderRow, 'shipping_zone_provider_id'>
+>;
+
+// =============================================================================
+// SHIPPING ZONE COUNTRY (platform-level — multi-country junction)
+// =============================================================================
+
+export interface ShippingZoneCountryRow {
+  shipping_zone_country_id: number;
+  uuid: string;
+  zone_id: number;
+  country: string;
+}
+
+export type ShippingZoneCountryInsert = Omit<
+  ShippingZoneCountryRow,
+  'shipping_zone_country_id' | 'uuid'
+>;
+export type ShippingZoneCountryUpdate = Partial<
+  Omit<ShippingZoneCountryRow, 'shipping_zone_country_id'>
+>;
+
+// =============================================================================
+// CORE SHIPPING METHOD (Core-provider-internal — global method list)
+// =============================================================================
+
+export interface CoreShippingMethodRow {
+  core_shipping_method_id: number;
+  uuid: string;
+  name: string;
+  is_enabled: boolean;
+  sort_order: number;
+  /**
+   * Merchant-chosen default carrier for this method (a `carrier.code`).
+   * Written into `shipping_method_data.snapshot.carrier` at checkout as a
+   * fulfillment hint — never customer-facing. NewShipmentDialog uses it to
+   * pre-select the carrier dropdown when admin opens the ship dialog.
+   */
+  default_carrier_code: string | null;
+  /**
+   * Merchant-chosen default service code in the carrier's vocabulary
+   * (`FEDEX_GROUND`, `usps_priority`, ...). Written into
+   * `shipping_method_data.snapshot.serviceCode` at checkout, then read by
+   * `createShipment.buildCreateLabelInput` and threaded to
+   * `CreateLabelInput.serviceCode` so the carrier prints the exact service
+   * the customer paid for instead of falling through to its own default.
+   * Free-form varchar — service codes are carrier-specific and core does
+   * not validate them.
+   */
+  default_service_code: string | null;
+}
+
+export type CoreShippingMethodInsert = Omit<
+  CoreShippingMethodRow,
+  'core_shipping_method_id' | 'uuid'
+>;
+export type CoreShippingMethodUpdate = Partial<
+  Omit<CoreShippingMethodRow, 'core_shipping_method_id'>
+>;
+
+// =============================================================================
+// CORE SHIPPING METHOD RATE (Core-provider-internal — per-zone rate/condition)
+// =============================================================================
+
+export interface CoreShippingMethodRateRow {
+  core_shipping_method_rate_id: number;
+  uuid: string;
+  method_id: number;
+  zone_id: number;
+  is_enabled: boolean;
+  cost: string | null;
+  /** 'price' | 'weight' | null */
+  condition_type: string | null;
+  min: string | null;
+  max: string | null;
+  price_based_cost: Record<string, unknown> | null;
+  weight_based_cost: Record<string, unknown> | null;
+}
+
+export type CoreShippingMethodRateInsert = Omit<
+  CoreShippingMethodRateRow,
+  'core_shipping_method_rate_id' | 'uuid'
+>;
+export type CoreShippingMethodRateUpdate = Partial<
+  Omit<CoreShippingMethodRateRow, 'core_shipping_method_rate_id'>
 >;
 
 // =============================================================================

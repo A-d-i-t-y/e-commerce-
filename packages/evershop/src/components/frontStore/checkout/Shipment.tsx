@@ -126,7 +126,11 @@ export function Shipment() {
     };
   }, [watchedShippingAddress, dirtyFields.shippingAddress]); // Clean dependency array
 
-  const updateShipment = async (method: { code: string; name: string }) => {
+  const updateShipment = async (method: {
+    code: string;
+    name: string;
+    providerCode: string;
+  }) => {
     try {
       const validate = await form.trigger('shippingAddress');
       if (!validate) {
@@ -134,9 +138,32 @@ export function Shipment() {
       }
       const shippingAddress = form.getValues('shippingAddress');
 
+      // `providerCode` MUST flow through. Silently defaulting to 'core' (the
+      // earlier behavior) mis-routes any non-core method through
+      // `resolveShippingQuote(coreProvider, …)`, which then fails validation
+      // because the method isn't in Core's list — surfacing as "method no
+      // longer available." availableShippingMethods always carries it from
+      // the server (AvailableShippingMethod.providerCode is `String!`); if
+      // the field is missing here that's a strip bug upstream, not a
+      // legitimate fallback case.
+      if (!method.providerCode) {
+        throw new Error(
+          `Shipping method "${method.code}" is missing providerCode — refusing to guess.`
+        );
+      }
       await addShippingAddress(shippingAddress);
-      await addShippingMethod(method.code, method.name);
-      updateCheckoutData({ shippingAddress, shippingMethod: method.code });
+      await addShippingMethod(method.code, method.name, method.providerCode);
+      // Stash BOTH method code and provider in checkoutData so the eventual
+      // POST to `cart.checkoutApi` carries the provider through. The server's
+      // checkout service no longer assumes 'core'; without
+      // `shippingProvider` the request would 422 with "Selected shipping
+      // method is no longer available" when the cart's persisted provider
+      // disagrees.
+      updateCheckoutData({
+        shippingAddress,
+        shippingMethod: method.code,
+        shippingProvider: method.providerCode
+      });
       return true;
     } catch (error) {
       toast.error(
