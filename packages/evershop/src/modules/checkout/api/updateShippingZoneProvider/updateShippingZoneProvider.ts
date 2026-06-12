@@ -20,7 +20,7 @@ interface UpdateShippingZoneProviderBody {
 
 /**
  * Update the per-zone attachment state for a provider: enabled flag,
- * per-zone config (matches `provider.zoneConfigSchema`), and sort order
+ * per-zone config (matches `provider.zoneConfigFields`), and sort order
  * within the zone. Keyed on (zone_id, provider_code) — registry-only,
  * no provider table to dereference.
  */

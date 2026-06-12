@@ -12,9 +12,57 @@
  *     instance from the cart pipeline — only the curated DTO.
  */
 
-import type { JSONSchema7 } from 'json-schema';
 import type { Address } from './customerAddress.js';
 import type { ShippingZoneRow } from './db/index.js';
+
+/**
+ * Validation rules for a zone-config field — a JSON-serializable subset of
+ * react-hook-form's RegisterOptions (this object travels over GraphQL to the
+ * admin form). `pattern.value` is a regex SOURCE string; the form renderer
+ * compiles it.
+ */
+export interface ZoneConfigFieldValidation {
+  /** Error message shown when the field is empty. */
+  required?: string;
+  min?: { value: number; message: string };
+  max?: { value: number; message: string };
+  pattern?: { value: string; message: string };
+}
+
+/**
+ * One field of a provider's per-zone configuration form (the Attach Provider
+ * dialog and the attachment's Configure dialog). Purpose-built — NOT JSON
+ * Schema: the admin renders these with EverShop's built-in form fields, so
+ * the vocabulary is exactly what those components support. Field order =
+ * render order.
+ *
+ * type → component:
+ *   'text'     → InputField
+ *   'number'   → NumberField
+ *   'textarea' → TextareaField   (long values, e.g. big allow-lists)
+ *   'select'   → SelectField     (requires `options`)
+ *   'toggle'   → ToggleField     (boolean config values)
+ */
+export interface ZoneConfigField {
+  /** Key in `shipping_zone_provider.config` (and `ctx.zoneConfig`). */
+  name: string;
+  /** Which built-in control renders this field. */
+  type: 'text' | 'number' | 'textarea' | 'select' | 'toggle';
+  /** Form label. */
+  label: string;
+  /** Input placeholder (text / number / textarea / select). */
+  placeholder?: string;
+  /** Help text rendered under the input. */
+  description?: string;
+  /** Initial value when attaching; fallback when the config has no value. */
+  defaultValue?: string | number | boolean;
+  /** Choices — required when type is 'select', ignored otherwise. */
+  options?: Array<{ value: string | number; label: string }>;
+  /** Labels for the two toggle states ('toggle' only). */
+  trueLabel?: string;
+  falseLabel?: string;
+  validation?: ZoneConfigFieldValidation;
+}
 
 /**
  * Delivery window returned with a shipping method. All fields optional.
@@ -134,8 +182,13 @@ export interface ShippingProvider {
   /** Description for admin UI. */
   description?: string;
 
-  /** JSON Schema for the per-zone provider config form (used at attachment time). */
-  zoneConfigSchema?: JSONSchema7;
+  /**
+   * The per-zone provider config form (Attach Provider dialog + the
+   * attachment's Configure dialog), declared field-by-field. Values are
+   * saved to `shipping_zone_provider.config` and handed back via
+   * `ctx.zoneConfig`. Omit/empty = no per-zone configuration.
+   */
+  zoneConfigFields?: ZoneConfigField[];
 
   /**
    * Return available methods for this cart + address.

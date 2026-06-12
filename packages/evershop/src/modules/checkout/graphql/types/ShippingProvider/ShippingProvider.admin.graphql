@@ -10,8 +10,8 @@ type ShippingProvider {
   code: String!
   name: String!
   description: String
-  """JSON Schema for the per-zone provider config form. Null if none."""
-  zoneConfigSchema: JSON
+  """Per-zone config form fields (ZoneConfigField[]). Null/empty if none."""
+  zoneConfigFields: JSON
 }
 
 """

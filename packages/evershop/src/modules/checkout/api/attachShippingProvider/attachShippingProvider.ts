@@ -23,7 +23,7 @@ interface AttachShippingProviderBody {
  * is no `shipping_provider` table). Validates the code resolves to a
  * registered provider before insert, since the DB no longer enforces it via
  * FK. Per-zone provider config (e.g., per-zone markup %) goes in `config`
- * and is validated against `provider.zoneConfigSchema` at the admin UI
+ * and is validated against `provider.zoneConfigFields` at the admin UI
  * layer; this endpoint accepts any object shape.
  */
 export default async (request: EvershopRequest, response, next) => {

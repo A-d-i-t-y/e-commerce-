@@ -1058,7 +1058,7 @@ export interface ShippingZoneProviderRow {
   /** Soft reference to a registered provider's `Carrier`-like `code`. */
   provider_code: string;
   is_enabled: boolean;
-  /** Per-zone provider config; shape declared by provider.zoneConfigSchema. */
+  /** Per-zone provider config; shape declared by provider.zoneConfigFields. */
   config: Record<string, unknown>;
   sort_order: number;
 }

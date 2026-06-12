@@ -34,7 +34,7 @@ const ZonesQuery = `
           code
           name
           description
-          zoneConfigSchema
+          zoneConfigFields
         }
       }
       updateApi

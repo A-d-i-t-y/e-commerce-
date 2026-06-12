@@ -122,7 +122,7 @@ export const coreShippingProvider: ShippingProvider = {
   name: 'Core Shipping',
   description:
     'Built-in admin-configured shipping methods with per-zone rates.',
-  // No configSchema or zoneConfigSchema — Core's global/per-attachment config is empty.
+  // No zoneConfigFields — Core's per-attachment config is empty.
   // Per-zone variation lives in core_shipping_method_rate (managed under
   // Settings → Shipping → Providers → Core → Methods).
 

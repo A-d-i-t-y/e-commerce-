@@ -1,7 +1,13 @@
 import Spinner from '@components/admin/Spinner.jsx';
+import { InputField } from '@components/common/form/InputField.js';
+import { NumberField } from '@components/common/form/NumberField.js';
+import { SelectField } from '@components/common/form/SelectField.js';
+import { TextareaField } from '@components/common/form/TextareaField.js';
+import { ToggleField } from '@components/common/form/ToggleField.js';
 import { Button } from '@components/common/ui/Button.js';
 import axios from 'axios';
 import React from 'react';
+import type { RegisterOptions } from 'react-hook-form';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { useQuery } from 'urql';
@@ -13,28 +19,36 @@ const ProvidersQuery = `
       code
       name
       description
-      zoneConfigSchema
+      zoneConfigFields
     }
   }
 `;
 
-interface JsonSchemaProperty {
-  type?: string | string[];
-  title?: string;
+/** Mirrors core's `ZoneConfigField` (types/shippingProvider.ts) — the
+ *  provider-declared, purpose-built field list (NOT JSON Schema). */
+export interface ZoneConfigFieldDef {
+  name: string;
+  type: 'text' | 'number' | 'textarea' | 'select' | 'toggle';
+  label: string;
+  placeholder?: string;
   description?: string;
-  default?: unknown;
-}
-
-interface ZoneConfigSchema {
-  properties?: Record<string, JsonSchemaProperty>;
-  required?: string[];
+  defaultValue?: string | number | boolean;
+  options?: Array<{ value: string | number; label: string }>;
+  trueLabel?: string;
+  falseLabel?: string;
+  validation?: {
+    required?: string;
+    min?: { value: number; message: string };
+    max?: { value: number; message: string };
+    pattern?: { value: string; message: string };
+  };
 }
 
 interface ProviderRow {
   code: string;
   name: string;
   description?: string | null;
-  zoneConfigSchema: ZoneConfigSchema | null;
+  zoneConfigFields: ZoneConfigFieldDef[] | null;
 }
 
 interface AttachProviderDialogProps {
@@ -44,9 +58,9 @@ interface AttachProviderDialogProps {
 }
 
 /**
- * Attach a provider to a zone. Renders the provider's `zoneConfigSchema` as
- * a flat form (string/number/integer). For providers with no schema (e.g.,
- * Core), shows an informational note instead.
+ * Attach a provider to a zone. Renders the provider's `zoneConfigFields`
+ * with EverShop's built-in form fields (validation included). For providers
+ * with no fields (e.g., Core), shows an informational note instead.
  *
  * The "configure existing attachment" flow is symmetric — phase 8 (or a
  * polish pass) can extract a reusable EditAttachmentDialog. For phase 7 the
@@ -138,7 +152,7 @@ function AttachForm({
       <div>
         <label className="text-sm font-medium block mb-1">Provider</label>
         <select
-          className="w-full border rounded px-2 py-1"
+          className="w-full border border-border rounded px-2 py-1"
           value={selectedCode || ''}
           onChange={(e) => {
             setValue('provider_code', e.target.value);
@@ -167,7 +181,7 @@ function AttachForm({
               </p>
             )}
           </div>
-          <ZoneConfigFields schema={selected.zoneConfigSchema} />
+          <ZoneConfigFields fields={selected.zoneConfigFields} />
         </div>
       )}
 
@@ -180,13 +194,15 @@ function AttachForm({
   );
 }
 
-function ZoneConfigFields({ schema }: { schema: ZoneConfigSchema | null }) {
-  const { register } = useFormContext();
-  if (
-    !schema ||
-    !schema.properties ||
-    Object.keys(schema.properties).length === 0
-  ) {
+export function ZoneConfigFields({
+  fields,
+  values
+}: {
+  fields: ZoneConfigFieldDef[] | null;
+  /** Current config values — prefill for the edit-config dialog. */
+  values?: Record<string, unknown>;
+}) {
+  if (!fields || fields.length === 0) {
     return (
       <p className="text-sm text-muted-foreground italic">
         This provider has no per-zone configuration. Methods and per-zone rates
@@ -194,45 +210,102 @@ function ZoneConfigFields({ schema }: { schema: ZoneConfigSchema | null }) {
       </p>
     );
   }
-  const entries = Object.entries(schema.properties);
   return (
     <div className="space-y-3">
-      {entries.map(([key, prop]) => {
-        const type = Array.isArray(prop.type) ? prop.type[0] : prop.type;
-        const label = prop.title ?? key;
-        const defaultValue = prop.default ?? '';
-        if (type === 'number' || type === 'integer') {
+      {fields.map((field) => {
+        // Translate the JSON-serializable rules into react-hook-form rules
+        // (pattern travels as a regex SOURCE string — compile it here).
+        const validation: RegisterOptions = {};
+        if (field.validation?.required) {
+          validation.required = field.validation.required;
+        }
+        if (field.validation?.min) {
+          validation.min = field.validation.min;
+        }
+        if (field.validation?.max) {
+          validation.max = field.validation.max;
+        }
+        if (field.validation?.pattern) {
+          validation.pattern = {
+            value: new RegExp(field.validation.pattern.value),
+            message: field.validation.pattern.message
+          };
+        }
+        const current = values?.[field.name];
+        const initial =
+          current !== undefined && current !== null && current !== ''
+            ? current
+            : field.defaultValue;
+        const common = {
+          name: `config.${field.name}`,
+          label: field.label,
+          required: Boolean(field.validation?.required),
+          validation,
+          helperText: field.description
+        };
+        if (field.type === 'number') {
           return (
-            <div key={key}>
-              <label className="text-sm font-medium block mb-1">{label}</label>
-              <input
-                type="number"
-                className="w-full border rounded px-2 py-1"
-                defaultValue={Number(defaultValue as number) || 0}
-                {...register(`config.${key}`, { valueAsNumber: true })}
-              />
-              {prop.description && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {prop.description}
-                </p>
-              )}
-            </div>
+            <NumberField
+              key={field.name}
+              {...common}
+              placeholder={field.placeholder}
+              defaultValue={
+                initial === undefined || initial === null || initial === ''
+                  ? undefined
+                  : Number(initial)
+              }
+            />
+          );
+        }
+        if (field.type === 'toggle') {
+          return (
+            <ToggleField
+              key={field.name}
+              {...common}
+              defaultValue={Boolean(initial)}
+              trueValue={true}
+              falseValue={false}
+              trueLabel={field.trueLabel}
+              falseLabel={field.falseLabel}
+            />
+          );
+        }
+        if (field.type === 'select') {
+          return (
+            <SelectField
+              key={field.name}
+              {...common}
+              options={field.options ?? []}
+              placeholder={field.placeholder}
+              defaultValue={
+                initial === undefined || initial === null || initial === ''
+                  ? undefined
+                  : (initial as string | number)
+              }
+            />
+          );
+        }
+        if (field.type === 'textarea') {
+          return (
+            <TextareaField
+              key={field.name}
+              {...common}
+              placeholder={field.placeholder}
+              defaultValue={
+                initial === undefined || initial === null ? '' : String(initial)
+              }
+            />
           );
         }
         return (
-          <div key={key}>
-            <label className="text-sm font-medium block mb-1">{label}</label>
-            <input
-              className="w-full border rounded px-2 py-1"
-              defaultValue={String(defaultValue ?? '')}
-              {...register(`config.${key}`)}
-            />
-            {prop.description && (
-              <p className="text-xs text-muted-foreground mt-1">
-                {prop.description}
-              </p>
-            )}
-          </div>
+          <InputField
+            key={field.name}
+            {...common}
+            placeholder={field.placeholder}
+            defaultValue={
+              initial === undefined || initial === null ? '' : String(initial)
+            }
+          />
         );
       })}
     </div>

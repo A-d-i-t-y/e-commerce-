@@ -21,6 +21,7 @@ import React from 'react';
 import { toast } from 'react-toastify';
 import { AttachProviderDialog } from './AttachProviderDialog.js';
 import { ZoneForm } from './ZoneForm.js';
+import { ZoneProviderConfigDialog } from './ZoneProviderConfigDialog.js';
 
 export interface Country {
   name: string;
@@ -43,7 +44,7 @@ export interface ZoneProvider {
     code: string;
     name: string;
     description?: string | null;
-    zoneConfigSchema?: Record<string, unknown> | null;
+    zoneConfigFields?: Array<Record<string, unknown>> | null;
   };
 }
 
@@ -65,6 +66,9 @@ interface ZoneProps {
 export function Zone({ zone, reload }: ZoneProps) {
   const [editOpen, setEditOpen] = React.useState(false);
   const [attachOpen, setAttachOpen] = React.useState(false);
+  const [configuring, setConfiguring] = React.useState<ZoneProvider | null>(
+    null
+  );
 
   const detach = async (providerCode: string, providerName: string) => {
     if (!confirm(`Detach ${providerName} from ${zone.name}?`)) return;
@@ -216,11 +220,20 @@ export function Zone({ zone, reload }: ZoneProps) {
                     <TableCell className="space-x-2">
                       {zp.provider.code === 'core' && (
                         <a
-                          href="/admin/setting/shippingProviders/core"
+                          href="/admin/setting/shippingProviders"
                           className="text-primary"
                         >
                           Methods →
                         </a>
+                      )}
+                      {(zp.provider.zoneConfigFields?.length ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className="text-primary"
+                          onClick={() => setConfiguring(zp)}
+                        >
+                          Configure
+                        </button>
                       )}
                       <button
                         type="button"
@@ -257,6 +270,26 @@ export function Zone({ zone, reload }: ZoneProps) {
                     reload();
                   }}
                 />
+              </DialogContent>
+            </Dialog>
+            <Dialog
+              open={configuring !== null}
+              onOpenChange={(open) => {
+                if (!open) setConfiguring(null);
+              }}
+            >
+              <DialogContent>
+                {configuring && (
+                  <ZoneProviderConfigDialog
+                    zoneUuid={zone.uuid}
+                    zoneName={zone.name}
+                    zoneProvider={configuring}
+                    onSaved={() => {
+                      setConfiguring(null);
+                      reload();
+                    }}
+                  />
+                )}
               </DialogContent>
             </Dialog>
           </div>

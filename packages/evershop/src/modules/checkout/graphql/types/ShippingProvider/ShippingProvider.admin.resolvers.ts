@@ -23,7 +23,7 @@ interface RegistryProviderProjection {
   code: string;
   name: string;
   description: string | null;
-  zoneConfigSchema: Record<string, unknown> | null;
+  zoneConfigFields: unknown[] | null;
 }
 
 function project(p: ShippingProvider): RegistryProviderProjection {
@@ -31,8 +31,10 @@ function project(p: ShippingProvider): RegistryProviderProjection {
     code: p.code,
     name: p.name,
     description: p.description ?? null,
-    zoneConfigSchema:
-      (p.zoneConfigSchema as Record<string, unknown> | undefined) ?? null
+    zoneConfigFields:
+      p.zoneConfigFields && p.zoneConfigFields.length > 0
+        ? p.zoneConfigFields
+        : null
   };
 }
 

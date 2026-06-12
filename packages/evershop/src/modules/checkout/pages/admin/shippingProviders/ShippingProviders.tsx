@@ -1,14 +1,24 @@
 import { SettingMenu } from '@components/admin/SettingMenu.js';
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@components/common/ui/Card.js';
+import Area from '@components/common/Area.js';
+import { Form } from '@components/common/form/Form.js';
 import React from 'react';
-import { ProvidersList } from './shippingProviders/ProvidersList.js';
 
-export default function ShippingProviders() {
+interface ShippingProvidersProps {
+  saveSettingApi: string;
+}
+
+/**
+ * Shipping Providers settings page — same structure as the Payment settings
+ * page (`setting/pages/admin/paymentSetting/PaymentSetting.tsx`): one
+ * section per provider, each provider owns its section as a React component
+ * mounted into the `shippingProviderSetting` area (Core ships its methods
+ * section; extensions like Shippo/ShipStation ship their credentials
+ * sections). The surrounding form posts every registered field to the
+ * saveSetting API.
+ */
+export default function ShippingProviders({
+  saveSettingApi
+}: ShippingProvidersProps) {
   return (
     <div className="main-content-inner">
       <div className="grid grid-cols-6 gap-x-5 grid-flow-row ">
@@ -16,16 +26,14 @@ export default function ShippingProviders() {
           <SettingMenu />
         </div>
         <div className="col-span-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Shipping Providers</CardTitle>
-              <CardDescription>
-                Manage shipping integrations. Each provider declares its own
-                methods at checkout.
-              </CardDescription>
-            </CardHeader>
-            <ProvidersList />
-          </Card>
+          <Form
+            id="shippingProviderSettingForm"
+            method="POST"
+            action={saveSettingApi}
+            successMessage="Shipping provider setting saved"
+          >
+            <Area id="shippingProviderSetting" className="grid gap-5" />
+          </Form>
         </div>
       </div>
     </div>
@@ -36,3 +44,9 @@ export const layout = {
   areaId: 'content',
   sortOrder: 10
 };
+
+export const query = `
+  query Query {
+    saveSettingApi: url(routeId: "saveSetting")
+  }
+`;
