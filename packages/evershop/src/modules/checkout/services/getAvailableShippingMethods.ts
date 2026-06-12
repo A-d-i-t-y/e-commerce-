@@ -158,7 +158,9 @@ export async function getAvailableShippingMethods(
       });
       const methods = await withTimeout(
         provider.getMethods(ctx),
-        DEFAULT_PROVIDER_TIMEOUT_MS,
+        // Per-provider override: slow-by-design upstreams (aggregator
+        // rate-shopping) can declare a larger budget than the default.
+        provider.quoteTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         `Provider ${provider.code} (zone ${zone.shipping_zone_id})`
       );
       return { providerCode: provider.code, methods };

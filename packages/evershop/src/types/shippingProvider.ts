@@ -168,6 +168,19 @@ export interface ShippingProvider {
    */
   quoteTtlSeconds?: number;
 
+  /**
+   * Per-provider budget (ms) for a single `getMethods` call before the
+   * orchestrator gives up on this provider for the request (other providers'
+   * methods still return — the fan-out is allSettled). Defaults to 5000ms.
+   *
+   * Set this when the upstream API is structurally slower than the default —
+   * e.g. aggregators that rate-shop every connected carrier in one call
+   * (ShipStation) can legitimately need 10-20s. Keep it as low as honest:
+   * this budget is checkout-blocking time for the customer when the quote
+   * isn't served from the fingerprint/TTL cache.
+   */
+  quoteTimeoutMs?: number;
+
   // purchaseMethod intentionally not in v1. Provider abstraction is open to
   // add it later as an optional method without breaking existing providers.
   // See "Deferred" in wiki/shipping-provider-design.md.
