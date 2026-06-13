@@ -1,4 +1,5 @@
 import {
+  asArray,
   ColorSwatchField,
   drawerInputClass,
   Field,
@@ -6,6 +7,7 @@ import {
   Section,
   Slider,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { LinkPicker } from '@components/common/page-builder/pickers/LinkPicker.js';
@@ -49,15 +51,18 @@ export default function AnnouncementBarSetting({
   const textColorV =
     (watch('settings.textColor') as string) ?? textColor ?? '#ffffff';
   const delayV = (watch('settings.delay') as number) ?? delay ?? 4000;
-  const announcements =
-    (watch('settings.announcements') as Announcement[] | undefined) ??
-    initialAnnouncements;
+  const announcements = useArraySetting<Announcement>(
+    'settings.announcements',
+    initialAnnouncements
+  );
 
   // Read live form state inside mutation helpers — prevents back-to-back
   // updates from racing each other through the stale-closure path.
   const readAnnouncements = (): Announcement[] =>
-    (getValues('settings.announcements') as Announcement[] | undefined) ??
-    initialAnnouncements;
+    asArray<Announcement>(
+      getValues('settings.announcements'),
+      initialAnnouncements
+    );
 
   const updateItem = (i: number, patch: Partial<Announcement>) => {
     const current = readAnnouncements();

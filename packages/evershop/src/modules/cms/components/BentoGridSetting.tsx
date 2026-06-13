@@ -1,4 +1,5 @@
 import {
+  asArray,
   ColorSwatchField,
   drawerInputClass,
   Field,
@@ -9,6 +10,7 @@ import {
   Segmented,
   Slider,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { LinkPicker } from '@components/common/page-builder/pickers/LinkPicker.js';
@@ -75,8 +77,7 @@ export default function BentoGridSetting({
 
   const { register, setValue, watch, getValues } = useScopedFormContext();
 
-  const tiles =
-    (watch('settings.tiles') as BentoTile[] | undefined) ?? initialTiles;
+  const tiles = useArraySetting<BentoTile>('settings.tiles', initialTiles);
   const gapV = ((watch('settings.gap') as string) ?? gap ?? 'md') as BentoGap;
   const minHeightV =
     (watch('settings.minHeight') as number) ?? minHeight ?? 360;
@@ -85,7 +86,7 @@ export default function BentoGridSetting({
   // two updates fired in quick succession (e.g. image URL + onLoadDimensions
   // dimensions) would otherwise both compute from the same pre-update array.
   const readTiles = (): BentoTile[] =>
-    (getValues('settings.tiles') as BentoTile[] | undefined) ?? initialTiles;
+    asArray<BentoTile>(getValues('settings.tiles'), initialTiles);
 
   const updateTile = (i: number, patch: Partial<BentoTile>) => {
     const current = readTiles();

@@ -31,6 +31,7 @@ export {
   drawerTextareaClass
 } from './drawer/index.js';
 export { RepeatableAccordion } from './drawer/RepeatableAccordion.js';
+export { asArray, useArraySetting } from './drawer/arraySetting.js';
 export {
   AnchorPicker,
   ANCHOR_CELLS

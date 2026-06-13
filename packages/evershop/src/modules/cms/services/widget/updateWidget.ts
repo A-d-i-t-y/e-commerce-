@@ -80,14 +80,41 @@ async function updateWidgetPlacements(
   data: Partial<WidgetData>,
   connection: PoolClient
 ) {
+  // Preferred shape: an explicit placements list. Replace the widget's
+  // route-level placements (entity_urn IS NULL) and recreate from the list;
+  // entity-scoped placements (owned by the page builder) are left untouched.
+  // New rows inherit the instance theme so the storefront's denormalized
+  // theme filter keeps matching (spec 04 § 4.2).
+  if (Array.isArray(data.placements)) {
+    const theme = (widget as { theme?: string | null }).theme ?? null;
+    await connection.query(
+      'DELETE FROM widget_placement WHERE widget_instance_id = $1 AND entity_urn IS NULL',
+      [widget.widget_instance_id]
+    );
+    for (const p of data.placements) {
+      const route = typeof p?.route === 'string' ? p.route : '';
+      const area = typeof p?.area === 'string' ? p.area : '';
+      if (!route || !area) continue;
+      await insert('widget_placement')
+        .given({
+          widget_instance_id: widget.widget_instance_id,
+          route,
+          area,
+          sort_order: Number(p?.sort_order) || 0,
+          theme
+        })
+        .execute(connection);
+    }
+    return;
+  }
+
   const touchesPlacement =
     data.route !== undefined ||
     data.area !== undefined ||
     data.sort_order !== undefined;
   if (!touchesPlacement) return;
 
-  // Replace-all strategy. Cheap (handful of rows per widget) and avoids
-  // diff complexity for v1.
+  // Legacy shape: cross-product replace-all.
   await del('widget_placement')
     .where('widget_instance_id', '=', widget.widget_instance_id)
     .execute(connection);

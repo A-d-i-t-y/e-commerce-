@@ -1,10 +1,12 @@
 import {
+  asArray,
   drawerInputClass,
   Field,
   RepeatableAccordion,
   Section,
   Segmented,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { CollectionPicker } from '@components/common/page-builder/pickers/CollectionPicker.js';
@@ -53,9 +55,10 @@ export default function CollectionStackSetting({
 
   const { register, setValue, watch, getValues } = useScopedFormContext();
 
-  const rows =
-    (watch('settings.collections') as CollectionRow[] | undefined) ??
-    initialCollections;
+  const rows = useArraySetting<CollectionRow>(
+    'settings.collections',
+    initialCollections
+  );
   const productCountV =
     ((watch('settings.productCount') as number) ?? productCount ?? 4) as
       | 2
@@ -69,8 +72,7 @@ export default function CollectionStackSetting({
   // Read live form state inside mutation helpers to dodge the stale-closure
   // race that bites when two updates fire in quick succession.
   const readRows = (): CollectionRow[] =>
-    (getValues('settings.collections') as CollectionRow[] | undefined) ??
-    initialCollections;
+    asArray<CollectionRow>(getValues('settings.collections'), initialCollections);
 
   const updateRow = (i: number, patch: Partial<CollectionRow>) => {
     const current = readRows();

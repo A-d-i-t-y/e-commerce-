@@ -1,5 +1,6 @@
 import { select } from '@evershop/postgres-query-builder';
 import { pool } from '../../../../../lib/postgres/connection.js';
+import { getActiveTheme } from '../../../../../lib/util/getActiveTheme.js';
 import { getEnabledWidgets } from '../../../../../lib/widget/widgetManager.js';
 import { EvershopResponse } from '../../../../../types/response.js';
 import { setContextValue } from '../../../../graphql/services/contextHelper.js';
@@ -13,9 +14,14 @@ export default async (request, response: EvershopResponse, next) => {
     query.andWhere('widget_instance.uuid', '=', request.params.id);
     const widget = await query.load(pool);
     const enabledWidgets = getEnabledWidgets();
+    // Theme isolation (spec 04 § 2): the standalone editor only opens widgets
+    // in the active theme. A widget tagged for a dormant theme is treated as
+    // not found — switch the active theme to edit it.
+    const activeTheme = getActiveTheme();
     if (
       widget === null ||
-      !enabledWidgets.find((row) => row.type === widget.type)
+      !enabledWidgets.find((row) => row.type === widget.type) ||
+      (widget.theme ?? null) !== activeTheme
     ) {
       response.status(404);
       next();

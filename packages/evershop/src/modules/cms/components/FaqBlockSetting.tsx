@@ -7,6 +7,7 @@ import {
   Section,
   Segmented,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { Button } from '@components/common/ui/Button.js';
@@ -75,8 +76,10 @@ export default function FaqBlockSetting({ faqBlockWidget }: FaqBlockSettingProps
   } = faqBlockWidget ?? {};
   const { register, setValue, watch } = useScopedFormContext();
 
-  const sections =
-    (watch('settings.sections') as FaqSection_[] | undefined) ?? initialSections;
+  const sections = useArraySetting<FaqSection_>(
+    'settings.sections',
+    initialSections
+  );
   const widthState =
     ((watch('settings.maxWidth') as string | null) ??
       maxWidth ??
