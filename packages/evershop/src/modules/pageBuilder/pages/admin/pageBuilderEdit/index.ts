@@ -1,6 +1,7 @@
 import { select } from '@evershop/postgres-query-builder';
 import { pool } from '../../../../../lib/postgres/connection.js';
 import { getRoutes } from '../../../../../lib/router/Router.js';
+import { getActiveTheme } from '../../../../../lib/util/getActiveTheme.js';
 import { NOT_FOUND } from '../../../../../lib/util/httpStatus.js';
 import { EvershopRequest } from '../../../../../types/request.js';
 import { EvershopResponse } from '../../../../../types/response.js';
@@ -26,6 +27,11 @@ export default async (request: EvershopRequest, response: EvershopResponse) => {
     response.status(401);
     return;
   }
+
+  // The theme the editor operates under — captured once from config and
+  // threaded into draft creation so the draft is tagged for (and isolated
+  // to) the currently-active theme (spec 04 § 9.5, sticky-theme contract).
+  const activeTheme = getActiveTheme();
 
   // Two session modes (spec § 5.7 + § 5.9.3):
   //   - Default: load the user's draft changeset (one per user).
@@ -55,7 +61,7 @@ export default async (request: EvershopRequest, response: EvershopResponse) => {
     if (!plan) {
       // Bad session uuid — fall back to draft so the user isn't blocked.
       // The picker can be reopened to choose a valid plan.
-      changeset = await getOrCreateDraftChangeset({ userId });
+      changeset = await getOrCreateDraftChangeset({ userId, theme: activeTheme });
     } else {
       const planChangeset = await select()
         .from('changeset')
@@ -64,7 +70,7 @@ export default async (request: EvershopRequest, response: EvershopResponse) => {
       if (!planChangeset || (planChangeset as any).published_at) {
         // Rollout's underlying changeset is gone or published — defensive
         // fall-back to draft. Published rollouts shouldn't be editable.
-        changeset = await getOrCreateDraftChangeset({ userId });
+        changeset = await getOrCreateDraftChangeset({ userId, theme: activeTheme });
       } else {
         changeset = planChangeset;
         rolloutContext = {
@@ -77,7 +83,7 @@ export default async (request: EvershopRequest, response: EvershopResponse) => {
       }
     }
   } else {
-    changeset = await getOrCreateDraftChangeset({ userId });
+    changeset = await getOrCreateDraftChangeset({ userId, theme: activeTheme });
   }
 
   setPageMetaInfo(request, {

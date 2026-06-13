@@ -123,6 +123,10 @@ export default async (
         name,
         changeset_id: changesetId,
         route_cursors: cursors,
+        // Inherit the changeset's theme (spec 04 § 9.10). The rollout fires
+        // on the storefront only while its theme is the active one, and the
+        // overlay it carries is already theme-tagged via the changeset's ops.
+        theme: (changeset as any).theme ?? null,
         start_time: startTime,
         end_time: endTime
       })

@@ -4,6 +4,7 @@ import uniqid from 'uniqid';
 import { error } from '../../../../../lib/log/logger.js';
 import { buildUrl } from '../../../../../lib/router/buildUrl.js';
 import { camelCase } from '../../../../../lib/util/camelCase.js';
+import { getActiveTheme } from '../../../../../lib/util/getActiveTheme.js';
 import { resolveLink } from '../../../../../lib/widget/linkResolver.js';
 import {
   getEnabledWidgets,
@@ -159,8 +160,17 @@ export default {
       //    present (loadStorefrontWidgets in cms/services/widget). Layers
       //    must match the iframe.
       if (typeof changeset === 'string' && changeset.length > 0) {
-        const ops = await loadActiveOps({ previewChangesetToken: changeset });
-        if (ops.length > 0) {
+        const { ops, changesetTheme } = await loadActiveOps({
+          previewChangesetToken: changeset
+        });
+        // Only overlay when the previewed changeset matches the active theme
+        // (spec 04 § 9.4). `changesetTheme === undefined` means the token
+        // resolved to nothing — there's no overlay to apply anyway.
+        const activeTheme = getActiveTheme();
+        if (
+          (changesetTheme === undefined || changesetTheme === activeTheme) &&
+          ops.length > 0
+        ) {
           applyOverlayToWidgets(widgetMap, placementMap, ops);
         }
       }

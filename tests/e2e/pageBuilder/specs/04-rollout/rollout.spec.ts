@@ -138,9 +138,13 @@ test.describe('rollout / dialog', () => {
     // `existingPlans`.
     const adminUserId = loadAdminUserId();
     const db = getDb();
+    // published_at = NOW() so this fixture changeset doesn't sit in the
+    // `(admin, NULL-theme)` open-draft bucket — `idx_changeset_user_theme_open`
+    // (added in v1.1.0) would otherwise collide with the admin's
+    // `pb-draft-<id>` open draft on later editor.open() calls.
     const { rows } = await db.query<{ changeset_id: number }>(
-      `INSERT INTO changeset (name, route_cursors, token, created_by)
-       VALUES ($1, $2::jsonb, $3, $4) RETURNING changeset_id`,
+      `INSERT INTO changeset (name, route_cursors, token, created_by, published_at)
+       VALUES ($1, $2::jsonb, $3, $4, NOW()) RETURNING changeset_id`,
       [
         'e2e-existing-cs',
         JSON.stringify({}),
@@ -213,15 +217,22 @@ test.describe('rollout / dialog', () => {
     });
     await expect(dialog.statusBadge).toHaveText('Scheduled');
     await expect(dialog.submitButton).toBeEnabled();
-    await dialog.submitButton.click();
 
-    // After success the Editor's handleScheduleRollout navigates to
-    // pickerHomeUrl (the no-`?session` editor URL). The SessionPicker
-    // then mounts on the new page.
-    await expect(page).toHaveURL(/\/admin\/page-builder\/edit\/homepage/);
-    await expect(
-      page.getByRole('dialog').filter({ hasText: /page-builder session/i })
-    ).toBeVisible({ timeout: 10_000 });
+    // Submit fires `POST /rollout-plans`, then `handleScheduleRollout`
+    // redirects the editor back to pickerHomeUrl. That redirect lands on the
+    // SAME `/edit/homepage` URL we're already on, so a `toHaveURL` check is a
+    // no-op — it resolves instantly and can't gate the DB read below, letting
+    // the SELECT race the still-in-flight create (flakily reading zero rows).
+    // Wait on the actual POST response so the row is committed before we read.
+    const [createResp] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes('/api/page-builder/rollout-plans') &&
+          r.request().method() === 'POST'
+      ),
+      dialog.submitButton.click()
+    ]);
+    expect(createResp.status()).toBe(201);
 
     // Verify the rollout row landed in the DB with the right metadata.
     const db = getDb();

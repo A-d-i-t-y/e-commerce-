@@ -1,7 +1,6 @@
 import type { FrameLocator, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { editor as ed } from '../../shared/selectors.js';
-import { SessionPickerPage } from './SessionPickerPage.js';
 
 /**
  * Page-object model for the page-builder editor.
@@ -41,21 +40,50 @@ export class EditorPage {
     routeId: string,
     opts: { session?: 'startFresh' | 'continueDraft' } = {}
   ): Promise<void> {
+    // Suppress the SessionPicker for the lifetime of this page context.
+    // Editor.tsx mounts the picker based on a per-changeset sessionStorage
+    // key (`pb_session_ack_<changesetId>` = '1' → suppressed). We override
+    // `sessionStorage.getItem` to short-circuit reads of any key matching
+    // that prefix to '1' WHILE `window.__pbSuppressPicker` is truthy.
+    // Cheap, deterministic, survives reloads (the init script runs on
+    // every navigation in the page context).
+    //
+    // Tests that intentionally verify picker mounting (e.g. the "create
+    // succeeds → editor navigates to picker home" rollout test) call
+    // `editor.allowPicker()` before the navigation that should surface
+    // the picker; that flips the flag and lets the next getItem return
+    // its real value.
+    await this.page.addInitScript(() => {
+      const orig = window.sessionStorage.getItem.bind(window.sessionStorage);
+      window.sessionStorage.getItem = (key: string) => {
+        if (
+          (window as unknown as { __pbSuppressPicker?: boolean })
+            .__pbSuppressPicker &&
+          typeof key === 'string' &&
+          key.startsWith('pb_session_ack_')
+        ) {
+          return '1';
+        }
+        return orig(key);
+      };
+      (window as unknown as { __pbSuppressPicker?: boolean }).__pbSuppressPicker =
+        true;
+    });
+
     await this.page.goto(`/admin/page-builder/edit/${routeId}`);
 
-    // SessionPicker covers the editor on entry. Dismiss before asserting
-    // any editor chrome — otherwise the modal's own `<header>` lands in
-    // strict-mode selector lookups.
-    const sessionPicker = new SessionPickerPage(this.page);
-    await expect(sessionPicker.dialog).toBeVisible({ timeout: 15_000 });
-    if (opts.session === 'continueDraft') {
-      await sessionPicker.continueDraftCard.click();
-      await sessionPicker.dialog.waitFor({ state: 'detached' });
-    } else {
-      await sessionPicker.startFresh();
-    }
+    // Topbar is the "React tree mounted" signal — rendered unconditionally
+    // by the page-builder shell. Picker (suppressed above) wouldn't have
+    // shown anyway, so no dismissal step.
+    await expect(this.page.locator(ed.topbar)).toBeVisible({
+      timeout: 15_000
+    });
 
-    await expect(this.page.locator(ed.topbar)).toBeVisible();
+    // `continueDraft` mode previously meant "click the continue card on the
+    // picker." With suppression, there's no picker. The semantics shift to
+    // "assume the draft is already open and continue editing" — same effect
+    // since getOrCreateDraftChangeset returns the existing draft if any.
+    void opts;
     // Iframe is the heaviest part of the mount; the spec is allowed to
     // assume it's settled before any preview-side assertions.
     const frame = await this.previewFrame();
@@ -141,5 +169,27 @@ export class EditorPage {
    */
   async previewFrame(): Promise<FrameLocator> {
     return this.page.frameLocator(ed.iframe);
+  }
+
+  /**
+   * Release the SessionPicker suppression installed by `open()`. Use this
+   * when a test deliberately wants the picker to mount on a subsequent
+   * navigation (e.g. asserting "create rollout → editor redirects to
+   * picker home → picker visible"). After this call, the suppression
+   * stays off for the rest of the page context's lifetime — re-running
+   * `open()` re-enables it.
+   */
+  async allowPicker(): Promise<void> {
+    await this.page.evaluate(() => {
+      (window as unknown as { __pbSuppressPicker?: boolean }).__pbSuppressPicker =
+        false;
+    });
+    // Also persist across reloads — the init script sets the flag to
+    // true on every navigation, so we need to re-add an init script that
+    // sets it false from now on.
+    await this.page.addInitScript(() => {
+      (window as unknown as { __pbSuppressPicker?: boolean }).__pbSuppressPicker =
+        false;
+    });
   }
 }

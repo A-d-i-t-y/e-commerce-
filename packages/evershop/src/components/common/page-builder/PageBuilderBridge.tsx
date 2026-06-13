@@ -103,6 +103,24 @@ export function PageBuilderBridge(): null {
 
     ensureGlobalsOutlineStyle();
 
+    // Capture-phase link guard: edit mode disables in-preview navigation.
+    // The page-builder session lives in the iframe's URL (`?changeset=`),
+    // so following any <a href> would reload the iframe without the token
+    // and silently deactivate every edit affordance — pageBuilderMode.ts
+    // requires the param. Several widgets nest <Editable> text inside
+    // anchors (BentoGrid tiles, Banner link-wrap), so a click meant to
+    // start inline editing would otherwise also navigate. preventDefault
+    // only — the click still bubbles to `onBodyClick` below so deselection
+    // keeps working. `auxclick` covers middle-click, which would open the
+    // tokenless URL in a new tab. Route switching stays the admin page
+    // switcher's job.
+    const onLinkActivate = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('a[href]')) e.preventDefault();
+    };
+    document.addEventListener('click', onLinkActivate, true);
+    document.addEventListener('auxclick', onLinkActivate, true);
+
     // Bubble-phase body click: any click in the iframe is treated as
     // "click outside the active selection". The toolbar's Settings /
     // Delete buttons each call `event.stopPropagation()` before firing
@@ -240,6 +258,8 @@ export function PageBuilderBridge(): null {
     return () => {
       window.removeEventListener('message', handler);
       document.removeEventListener('click', onBodyClick);
+      document.removeEventListener('click', onLinkActivate, true);
+      document.removeEventListener('auxclick', onLinkActivate, true);
     };
   }, [setData]);
 

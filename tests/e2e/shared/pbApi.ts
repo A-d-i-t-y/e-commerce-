@@ -112,19 +112,27 @@ export async function insertRolloutPlanDirect(params: {
   routeCursors: Record<string, number>;
   startTime: Date;
   endTime: Date | null;
+  /**
+   * Theme tag for the rollout. Defaults to NULL — Phase 1 tests that don't
+   * care about theme isolation can omit this and inherit the NULL bucket
+   * (which matches the test env's NULL active theme). Theme-isolation
+   * tests pass an explicit value.
+   */
+  theme?: string | null;
 }): Promise<{ rolloutPlanId: number }> {
   const db = getDb();
   const { rows } = await db.query<{ rollout_plan_id: number }>(
     `INSERT INTO rollout_plan
-       (name, changeset_id, route_cursors, start_time, end_time)
-     VALUES ($1, $2, $3::jsonb, $4, $5)
+       (name, changeset_id, route_cursors, start_time, end_time, theme)
+     VALUES ($1, $2, $3::jsonb, $4, $5, $6)
      RETURNING rollout_plan_id`,
     [
       params.name,
       params.changesetId,
       JSON.stringify(params.routeCursors),
       params.startTime,
-      params.endTime
+      params.endTime,
+      params.theme ?? null
     ]
   );
   return { rolloutPlanId: rows[0].rollout_plan_id };

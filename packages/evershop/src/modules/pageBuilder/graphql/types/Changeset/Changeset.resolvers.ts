@@ -1,5 +1,6 @@
 import { select } from '@evershop/postgres-query-builder';
 import { camelCase } from '../../../../../lib/util/camelCase.js';
+import { getActiveTheme } from '../../../../../lib/util/getActiveTheme.js';
 
 export default {
   Query: {
@@ -29,17 +30,26 @@ export default {
   },
 
   ChangesetCollection: {
+    // Theme isolation (spec 04 § 9.8): the changeset collection only lists
+    // changesets belonging to the active theme. `theme IS NOT DISTINCT FROM`
+    // matches the NULL bucket and isn't composable in the typed builder, so
+    // these use raw queries.
     items: async (_root: any, _args: any, { pool }: any) => {
-      const rows = await select()
-        .from('changeset')
-        .execute(pool);
-      return rows.map(camelCase);
+      const activeTheme = getActiveTheme();
+      const result = await pool.query(
+        `SELECT * FROM changeset WHERE theme IS NOT DISTINCT FROM $1`,
+        [activeTheme]
+      );
+      return result.rows.map(camelCase);
     },
     total: async (_root: any, _args: any, { pool }: any) => {
-      const rows = await select('COUNT(changeset_id)', 'total')
-        .from('changeset')
-        .execute(pool);
-      return Number(rows[0]?.total ?? 0);
+      const activeTheme = getActiveTheme();
+      const result = await pool.query(
+        `SELECT COUNT(changeset_id)::int AS total
+         FROM changeset WHERE theme IS NOT DISTINCT FROM $1`,
+        [activeTheme]
+      );
+      return Number(result.rows[0]?.total ?? 0);
     }
   },
 

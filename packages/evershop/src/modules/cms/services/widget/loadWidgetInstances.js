@@ -1,6 +1,7 @@
 import { select } from '@evershop/postgres-query-builder';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../../../../lib/postgres/connection.js';
+import { getActiveTheme } from '../../../../lib/util/getActiveTheme.js';
 import { getEnabledWidgets } from '../../../../lib/widget/widgetManager.js';
 import { applyOverlayToWidgets } from '../../../pageBuilder/services/applyOverlayToWidgets.js';
 import { loadActiveOps } from '../../../pageBuilder/services/loadActiveOps.js';
@@ -58,7 +59,17 @@ export async function loadWidgetInstances(request) {
       .from('widget_instance')
       .where('uuid', '=', uuid)
       .load(pool);
+    // Theme isolation: the standalone widget editor only surfaces widgets
+    // tagged for the currently-active theme. A widget belonging to a
+    // dormant theme is treated as not found — the admin must switch
+    // themes to edit it. Matches "everything in the editor works based
+    // on the current theme" (spec 04 § 2).
+    const activeTheme = getActiveTheme();
     if (!wi || !enabledTypes.has(wi.type)) {
+      return [];
+    }
+    // IS NOT DISTINCT FROM semantics: both NULL → match.
+    if ((wi.theme ?? null) !== activeTheme) {
       return [];
     }
     return [
@@ -78,22 +89,36 @@ export async function loadWidgetInstances(request) {
 }
 
 async function loadStorefrontWidgets(request, route, enabledTypes) {
-  // 1. Source widget_instance state. Load every row; we filter at the end.
+  // Theme isolation (spec 04 § 9.2). Widgets and placements are tagged
+  // with the theme they belong to (set at install / page-builder write
+  // time). Only rows matching the currently-active theme — including the
+  // NULL bucket when no custom theme is active — are loaded.
+  // IS NOT DISTINCT FROM treats NULL = NULL as equality, so a single
+  // parameterized predicate covers both buckets.
+  const activeTheme = getActiveTheme();
+
+  // 1. Source widget_instance state for the active theme.
   const widgetRows = await pool.query(
     `SELECT widget_instance_id, uuid, name, type, settings, status
-     FROM widget_instance`
+     FROM widget_instance
+     WHERE theme IS NOT DISTINCT FROM $1`,
+    [activeTheme]
   );
   const widgetMap = new Map();
   for (const row of widgetRows.rows) {
     widgetMap.set(row.uuid, row);
   }
 
-  // 2. Source widget_placement state, joined with widget uuid.
+  // 2. Source widget_placement state, joined with widget uuid. The filter
+  // is on `p.theme` (denormalized — see spec 04 § 4.2) to avoid the join
+  // overhead on the hot path. Composite index (theme, route) covers it.
   const placementRows = await pool.query(
     `SELECT p.widget_placement_id, p.uuid, p.route, p.area, p.sort_order,
             p.entity_urn, wi.uuid AS widget_instance_uuid
      FROM widget_placement p
-     INNER JOIN widget_instance wi ON wi.widget_instance_id = p.widget_instance_id`
+     INNER JOIN widget_instance wi ON wi.widget_instance_id = p.widget_instance_id
+     WHERE p.theme IS NOT DISTINCT FROM $1`,
+    [activeTheme]
   );
   const placementMap = new Map();
   for (const row of placementRows.rows) {
@@ -113,8 +138,20 @@ async function loadStorefrontWidgets(request, route, enabledTypes) {
   const previewToken = request.query?.changeset
     ? String(request.query.changeset)
     : null;
-  const ops = await loadActiveOps({ previewChangesetToken: previewToken });
-  if (ops.length > 0) {
+  const { ops, changesetTheme } = await loadActiveOps({
+    previewChangesetToken: previewToken
+  });
+  // Preview theme enforcement (spec 04 § 9.4). Only overlay a preview
+  // changeset that belongs to the active theme. The route-level 409/302 is
+  // handled by the `enforcePreviewThemeMatch` storefront middleware before we
+  // get here; this keeps the overlay inert as defence in depth. The rollout
+  // branch returns `changesetTheme === undefined` (already theme-filtered in
+  // SQL) → matches → applies as before.
+  const previewThemeMatches =
+    !previewToken ||
+    changesetTheme === undefined ||
+    changesetTheme === activeTheme;
+  if (previewThemeMatches && ops.length > 0) {
     applyOverlayToWidgets(widgetMap, placementMap, ops);
   }
 

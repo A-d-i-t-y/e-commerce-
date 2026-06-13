@@ -53,8 +53,12 @@ export async function publishChangeset(changesetId: number): Promise<void> {
     );
     const ops = opsResult.rows as ChangesetOperationRow[];
 
+    // The changeset's theme is stamped onto inserted source rows and used to
+    // reject UPDATE/DELETE ops whose target was retagged to another theme
+    // (spec 04 § 9.9). A violation throws below and rolls back the publish.
+    const changesetTheme = ((changeset as any).theme ?? null) as string | null;
     for (const op of ops) {
-      await applyOperationToSource(op, conn);
+      await applyOperationToSource(op, conn, changesetTheme);
     }
 
     await update('changeset')

@@ -50,21 +50,54 @@ async function resolveWidgetInstanceIdByUuid(
   return row ? Number((row as any).widget_instance_id) : null;
 }
 
+/**
+ * Defence in depth for the publish path (spec 04 § 9.9). The REST endpoint
+ * (`addChangesetOperation`) already rejects cross-theme UPDATE/DELETE ops,
+ * but a changeset can hold a *stale* op whose target row was retagged to
+ * another theme after the op was recorded. Re-verify at apply time; a
+ * mismatch throws so the publish transaction rolls back atomically.
+ */
+async function assertRowThemeMatches(
+  table: 'widget_instance' | 'widget_placement',
+  uuid: string,
+  changesetTheme: string | null,
+  conn: PoolClient
+): Promise<void> {
+  const row = await select('theme')
+    .from(table)
+    .where('uuid', '=', uuid)
+    .load(conn);
+  if (row && (((row as any).theme ?? null) as string | null) !== changesetTheme) {
+    throw new Error(
+      `theme scope violation on publish: ${table} '${uuid}' has theme ` +
+        `'${(row as any).theme ?? null}' but changeset theme is ` +
+        `'${changesetTheme}'`
+    );
+  }
+}
+
 async function applyWidgetInstanceOp(
   opType: OpType,
   uuid: string,
   op: ChangesetOperationRow,
-  conn: PoolClient
+  conn: PoolClient,
+  changesetTheme: string | null
 ): Promise<void> {
   if (opType === 'INSERT') {
     const payload: any = { ...(op.new_payload as any) };
     payload.uuid = uuid;
+    // Theme is authoritative from the changeset — stamp it (covers legacy
+    // ops recorded before server-side stamping landed).
+    payload.theme = changesetTheme;
     await insert('widget_instance').given(payload).execute(conn);
     return;
   }
   if (opType === 'UPDATE') {
+    await assertRowThemeMatches('widget_instance', uuid, changesetTheme, conn);
     const payload: any = { ...(op.new_payload as any) };
     delete payload.uuid;
+    // Theme is immutable per row — never let an UPDATE op rewrite it.
+    delete payload.theme;
     await update('widget_instance')
       .given(payload)
       .where('uuid', '=', uuid)
@@ -72,6 +105,7 @@ async function applyWidgetInstanceOp(
     return;
   }
   // DELETE
+  await assertRowThemeMatches('widget_instance', uuid, changesetTheme, conn);
   await del('widget_instance').where('uuid', '=', uuid).execute(conn);
 }
 
@@ -79,11 +113,13 @@ async function applyWidgetPlacementOp(
   opType: OpType,
   uuid: string,
   op: ChangesetOperationRow,
-  conn: PoolClient
+  conn: PoolClient,
+  changesetTheme: string | null
 ): Promise<void> {
   if (opType === 'INSERT') {
     const payload: any = { ...(op.new_payload as any) };
     payload.uuid = uuid;
+    payload.theme = changesetTheme;
     if (payload.widget_instance_uuid) {
       const wid = await resolveWidgetInstanceIdByUuid(
         payload.widget_instance_uuid,
@@ -122,8 +158,10 @@ async function applyWidgetPlacementOp(
     return;
   }
   if (opType === 'UPDATE') {
+    await assertRowThemeMatches('widget_placement', uuid, changesetTheme, conn);
     const payload: any = { ...(op.new_payload as any) };
     delete payload.uuid;
+    delete payload.theme;
     if (Object.prototype.hasOwnProperty.call(payload, 'widget_instance_uuid')) {
       const wid = await resolveWidgetInstanceIdByUuid(
         payload.widget_instance_uuid,
@@ -139,6 +177,7 @@ async function applyWidgetPlacementOp(
     return;
   }
   // DELETE
+  await assertRowThemeMatches('widget_placement', uuid, changesetTheme, conn);
   await del('widget_placement').where('uuid', '=', uuid).execute(conn);
 }
 
@@ -146,19 +185,24 @@ async function applyWidgetPlacementOp(
  * Apply one operation to the source tables. Throws if the operation targets
  * an unsupported URN type (only `cms:widget_instance` and `cms:widget_placement`
  * are supported in Phase 3a).
+ *
+ * `changesetTheme` is the publishing changeset's theme: it is stamped onto
+ * inserted rows and verified against the target of UPDATE/DELETE ops
+ * (spec 04 § 9.9).
  */
 export async function applyOperationToSource(
   op: ChangesetOperationRow,
-  conn: PoolClient
+  conn: PoolClient,
+  changesetTheme: string | null
 ): Promise<void> {
   const parts = UrnService.parse(op.entity_urn);
   const opType = inferOpType(op.old_payload, op.new_payload);
 
   if (parts.service === 'cms' && parts.type === 'widget_instance') {
-    return applyWidgetInstanceOp(opType, parts.uuid, op, conn);
+    return applyWidgetInstanceOp(opType, parts.uuid, op, conn, changesetTheme);
   }
   if (parts.service === 'cms' && parts.type === 'widget_placement') {
-    return applyWidgetPlacementOp(opType, parts.uuid, op, conn);
+    return applyWidgetPlacementOp(opType, parts.uuid, op, conn, changesetTheme);
   }
   throw new Error(
     `Unsupported changeset op target: ${parts.service}:${parts.type}. ` +

@@ -113,6 +113,49 @@ export default async (
       });
     }
 
+    // --- Theme scope enforcement (spec 04 § 9.5, § 9.7) ---
+    // The changeset's theme is authoritative; the editor never has to know
+    // about theme because the server enforces it here, on the one endpoint
+    // every page-builder write funnels through.
+    //   - INSERT: stamp `changeset.theme` onto `new_payload`, overriding any
+    //     client-supplied value (defence against buggy/malicious clients).
+    //     The publish path materialises the row with this tag.
+    //   - UPDATE / DELETE: the target source row must belong to the same
+    //     theme. A cross-theme write is a 400 `theme scope violation`; the
+    //     transaction rolls back and nothing is persisted.
+    const changesetTheme = ((changeset as any).theme ?? null) as string | null;
+    const parsedUrn = UrnService.parse(entityUrn as string);
+    const URN_TABLE: Record<string, string> = {
+      'cms:widget_instance': 'widget_instance',
+      'cms:widget_placement': 'widget_placement'
+    };
+    const targetTable = URN_TABLE[`${parsedUrn.service}:${parsedUrn.type}`];
+
+    if (oldPayload == null && newPayload != null) {
+      if (typeof newPayload === 'object') {
+        (newPayload as any).theme = changesetTheme;
+      }
+    } else if (oldPayload != null && targetTable) {
+      const targetRow = await select()
+        .from(targetTable)
+        .where('uuid', '=', parsedUrn.uuid)
+        .load(conn);
+      if (
+        targetRow &&
+        (((targetRow as any).theme ?? null) as string | null) !== changesetTheme
+      ) {
+        await rollback(conn);
+        return response.status(BAD_REQUEST).json({
+          error: {
+            status: BAD_REQUEST,
+            message:
+              `theme scope violation: changeset theme '${changesetTheme}', ` +
+              `target row theme '${(targetRow as any).theme ?? null}'`
+          }
+        });
+      }
+    }
+
     // Per-route cursor model. Each route in `changeset.route_cursors` carries
     // its own "highest applied change_order" — undo/redo and redo-stack
     // truncation are scoped to a single route. `change_order` itself stays
