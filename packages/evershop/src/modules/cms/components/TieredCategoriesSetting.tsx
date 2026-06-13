@@ -1,4 +1,5 @@
 import {
+  asArray,
   drawerInputClass,
   Field,
   ImagePickerField,
@@ -6,6 +7,7 @@ import {
   Section,
   Segmented,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { LinkPicker } from '@components/common/page-builder/pickers/LinkPicker.js';
@@ -69,8 +71,7 @@ export default function TieredCategoriesSetting({
   // race where two updates (e.g. image URL then onLoadDimensions) fire
   // back-to-back, both close over the same pre-update `groups`, and the
   // second one overwrites the first.
-  const groups =
-    (watch('settings.groups') as TieredGroup[] | undefined) ?? initialGroups;
+  const groups = useArraySetting<TieredGroup>('settings.groups', initialGroups);
   const colsV = (watch('settings.columns') as number | null) ?? columns ?? null;
   const aspectV =
     ((watch('settings.imageAspect') as string) ??
@@ -82,7 +83,7 @@ export default function TieredCategoriesSetting({
     true;
 
   const readGroups = (): TieredGroup[] =>
-    (getValues('settings.groups') as TieredGroup[] | undefined) ?? initialGroups;
+    asArray<TieredGroup>(getValues('settings.groups'), initialGroups);
 
   const updateGroup = (i: number, patch: Partial<TieredGroup>) => {
     const current = readGroups();

@@ -30,7 +30,7 @@ export const layout = {
 
 export const query = `
   query Query {
-    page: widget(id: getContextValue("widgetId", null)) {
+    widget(id: getContextValue("widgetId", null)) {
       name
     }
     backUrl: url(routeId: "widgetGrid")

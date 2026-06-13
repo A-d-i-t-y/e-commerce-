@@ -78,8 +78,12 @@ export function RepeatableAccordion<T extends RepeatableItem>({
   initiallyOpenFirst = false,
   hideDelete = false
 }: RepeatableAccordionProps<T>) {
+  // Defensive: callers should pass an array, but the legacy widget editor can
+  // briefly hand a non-array (a JSON-string setting) on first render. Never
+  // throw `items.map is not a function` — degrade to an empty list.
+  const safeItems = Array.isArray(items) ? items : [];
   const [openIds, setOpenIds] = useState<Set<string>>(() => {
-    if (initiallyOpenFirst && items[0]) return new Set([items[0].id]);
+    if (initiallyOpenFirst && safeItems[0]) return new Set([safeItems[0].id]);
     return new Set();
   });
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -104,7 +108,7 @@ export function RepeatableAccordion<T extends RepeatableItem>({
   return (
     <div className="space-y-2">
       <ul className="space-y-1.5">
-        {items.map((item, index) => {
+        {safeItems.map((item, index) => {
           const isOpen = openIds.has(item.id);
           const hidden = isHidden?.(item) ?? false;
           return (
@@ -171,7 +175,7 @@ export function RepeatableAccordion<T extends RepeatableItem>({
                     <button
                       type="button"
                       onClick={() => onRemove(index)}
-                      disabled={items.length <= minItems}
+                      disabled={safeItems.length <= minItems}
                       className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
                       title="Remove"
                     >
@@ -195,7 +199,7 @@ export function RepeatableAccordion<T extends RepeatableItem>({
           size="sm"
           type="button"
           onClick={onAdd}
-          disabled={items.length >= maxItems}
+          disabled={safeItems.length >= maxItems}
           className="w-full justify-center"
         >
           <Plus className="mr-2 h-3.5 w-3.5" />

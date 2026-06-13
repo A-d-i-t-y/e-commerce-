@@ -106,6 +106,16 @@ export default {
     },
     widgets: async (_, { filters = [] }, { user }) => {
       const query = getWidgetsBaseQuery();
+      // Theme isolation (spec 04 § 2): the widget admin grid lists only
+      // widgets in the currently-active theme. A widget tagged for a dormant
+      // theme — or the NULL bucket when no custom theme is active — is hidden
+      // here; switch the active theme to manage it.
+      const activeTheme = getActiveTheme();
+      if (activeTheme === null) {
+        query.andWhere('widget_instance.theme', 'IS NULL', null);
+      } else {
+        query.andWhere('widget_instance.theme', '=', activeTheme);
+      }
       const root = new WidgetCollection(query);
       await root.init(filters, !!user);
       return root;

@@ -1,4 +1,5 @@
 import {
+  asArray,
   drawerInputClass,
   Field,
   ImagePickerField,
@@ -6,6 +7,7 @@ import {
   Section,
   Segmented,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { LinkPicker } from '@components/common/page-builder/pickers/LinkPicker.js';
@@ -74,8 +76,7 @@ export default function TrustStripSetting({
 
   const { register, setValue, watch, getValues } = useScopedFormContext();
 
-  const items =
-    (watch('settings.items') as TrustItem[] | undefined) ?? initialItems;
+  const items = useArraySetting<TrustItem>('settings.items', initialItems);
   const cols = (watch('settings.columns') as number | null) ?? columns ?? null;
   const showIconsState =
     (watch('settings.showIcons') as boolean | null) ?? showIcons ?? true;
@@ -93,7 +94,7 @@ export default function TrustStripSetting({
   // Read live form state inside mutation helpers to avoid back-to-back
   // updates (icon URL + onLoadDimensions) racing through stale closure state.
   const readItems = (): TrustItem[] =>
-    (getValues('settings.items') as TrustItem[] | undefined) ?? initialItems;
+    asArray<TrustItem>(getValues('settings.items'), initialItems);
 
   const updateItem = (index: number, patch: Partial<TrustItem>) => {
     const current = readItems();

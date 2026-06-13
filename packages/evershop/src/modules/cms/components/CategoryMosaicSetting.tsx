@@ -1,4 +1,5 @@
 import {
+  asArray,
   drawerInputClass,
   Field,
   ImagePickerField,
@@ -6,6 +7,7 @@ import {
   Section,
   Segmented,
   Toggle,
+  useArraySetting,
   useScopedFormContext
 } from '@components/common/page-builder/index.js';
 import { LinkPicker } from '@components/common/page-builder/pickers/LinkPicker.js';
@@ -79,8 +81,7 @@ export default function CategoryMosaicSetting({
   // `watch` drives re-render; reads inside mutation helpers go through
   // `getValues` so back-to-back updates (image URL + onLoadDimensions) read
   // each other's freshly-set state instead of the same stale closure value.
-  const tiles =
-    (watch('settings.tiles') as MosaicTile[] | undefined) ?? initialTiles;
+  const tiles = useArraySetting<MosaicTile>('settings.tiles', initialTiles);
   const colsV = (watch('settings.columns') as number | null) ?? columns ?? null;
   const aspectV =
     ((watch('settings.aspect') as string) ?? aspect ?? 'square') as MosaicAspect;
@@ -92,7 +93,7 @@ export default function CategoryMosaicSetting({
       'overlay') as MosaicLabelPosition;
 
   const readTiles = (): MosaicTile[] =>
-    (getValues('settings.tiles') as MosaicTile[] | undefined) ?? initialTiles;
+    asArray<MosaicTile>(getValues('settings.tiles'), initialTiles);
 
   const updateTile = (i: number, patch: Partial<MosaicTile>) => {
     const current = readTiles();

@@ -6,6 +6,7 @@ import {
   startTransaction
 } from '@evershop/postgres-query-builder';
 import { getConnection } from '../../../../lib/postgres/connection.js';
+import { getActiveTheme } from '../../../../lib/util/getActiveTheme.js';
 import {
   hookable,
   hookBefore,
@@ -27,7 +28,9 @@ export type WidgetData = {
 
 function validateWidgetDataBeforeInsert(data: WidgetData): WidgetData {
   const ajv = getAjv();
-  (widgetDataSchema as any).required = ['status', 'name', 'sort_order'];
+  // `sort_order` is per-placement now (it moved to widget_placement), so it is
+  // no longer a required top-level field.
+  (widgetDataSchema as any).required = ['status', 'name'];
   const jsonSchema = getValueSync(
     'createWidgetDataJsonSchema',
     widgetDataSchema,
@@ -64,6 +67,31 @@ async function insertWidgetPlacements(
   data: WidgetData,
   connection: PoolClient
 ) {
+  // Placements carry a denormalized copy of the instance theme (spec 04
+  // § 4.2) so the storefront can filter placements without a join.
+  const theme = (data.theme as string | null) ?? null;
+
+  // Preferred shape: an explicit list of placements, each with its own
+  // (route, area, sort_order) — one widget_placement row per entry.
+  if (Array.isArray(data.placements)) {
+    for (const p of data.placements) {
+      const route = typeof p?.route === 'string' ? p.route : '';
+      const area = typeof p?.area === 'string' ? p.area : '';
+      if (!route || !area) continue;
+      await insert('widget_placement')
+        .given({
+          widget_instance_id: widget.widget_instance_id,
+          route,
+          area,
+          sort_order: Number(p?.sort_order) || 0,
+          theme
+        })
+        .execute(connection);
+    }
+    return;
+  }
+
+  // Legacy shape: cross-product of route[] × area[] sharing one sort_order.
   const routes: string[] = Array.isArray(data.route) ? data.route : [];
   const areas: string[] = Array.isArray(data.area) ? data.area : [];
   const sortOrder = (data.sort_order as number) ?? 1;
@@ -75,7 +103,8 @@ async function insertWidgetPlacements(
           widget_instance_id: widget.widget_instance_id,
           route,
           area,
-          sort_order: sortOrder
+          sort_order: sortOrder,
+          theme
         })
         .execute(connection);
     }
@@ -110,6 +139,12 @@ async function createWidget(data: WidgetData, context: Record<string, any>) {
         }
       }
     }
+
+    // Stamp the active theme so the new widget lands in the current theme's
+    // bucket (storefront, page-builder, and the widget grid are theme-scoped
+    // — spec 04 § 2). Server-authoritative: set after validation so a client
+    // payload can't pick a different theme.
+    widgetData.theme = getActiveTheme();
 
     // Insert widget instance row
     const widget = await hookable(insertWidgetData, { ...context, connection })(
