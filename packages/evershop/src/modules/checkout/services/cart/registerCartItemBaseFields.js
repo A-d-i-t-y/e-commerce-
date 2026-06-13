@@ -123,6 +123,57 @@ export function registerCartItemBaseFields(fields) {
       ],
       dependencies: ['product_id']
     },
+    // Package (parcel) dimension snapshot — copied from the product's package
+    // at cart rebuild (the product loader merges package_* onto the row).
+    // NULL for legacy products (no package yet) and virtual items. Values are
+    // in the store's dimension unit (shop.dimensionUnit). Frozen onto
+    // order_item at placement via item.export().
+    {
+      key: 'package_length',
+      resolvers: [
+        async function resolver() {
+          const product = await this.getProduct();
+          const value = parseFloat(product.package_length);
+          return Number.isFinite(value) ? value : null;
+        }
+      ],
+      dependencies: ['product_id']
+    },
+    {
+      key: 'package_width',
+      resolvers: [
+        async function resolver() {
+          const product = await this.getProduct();
+          const value = parseFloat(product.package_width);
+          return Number.isFinite(value) ? value : null;
+        }
+      ],
+      dependencies: ['product_id']
+    },
+    {
+      key: 'package_height',
+      resolvers: [
+        async function resolver() {
+          const product = await this.getProduct();
+          const value = parseFloat(product.package_height);
+          return Number.isFinite(value) ? value : null;
+        }
+      ],
+      dependencies: ['product_id']
+    },
+    // Tare — the package's own empty weight (store weight unit). Snapshot
+    // like the dims, so label-time parcels never need a live package join.
+    {
+      key: 'package_weight',
+      resolvers: [
+        async function resolver() {
+          const product = await this.getProduct();
+          const value = parseFloat(product.package_weight);
+          return Number.isFinite(value) ? value : null;
+        }
+      ],
+      dependencies: ['product_id']
+    },
     {
       key: 'no_shipping_required',
       resolvers: [

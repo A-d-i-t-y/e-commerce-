@@ -10,6 +10,7 @@ export * from './orderValidator.js';
 export * from './addShippingAddress.js';
 export * from './addBillingAddress.js';
 export * from './checkout.js';
+export * from './setShippingMethod.js';
 export {
   default as removeCartItem,
   hookBeforeRemoveCartItem,
@@ -25,3 +26,45 @@ export {
   hookBeforeAddCartItem,
   hookAfterAddCartItem
 } from './addCartItem.js';
+
+// Shipping provider registry — public API for module extensions.
+export {
+  registerShippingProvider,
+  getShippingProvider,
+  getAllShippingProviders
+} from './shipping/registry.js';
+
+// Core provider rate CRUD — hookable services behind the admin REST endpoints.
+export {
+  default as createCoreShippingRate,
+  hookBeforeCreateCoreShippingRate,
+  hookAfterCreateCoreShippingRate
+} from './shipping/core/createCoreShippingRate.js';
+export type {
+  CoreShippingRateData,
+  CreateCoreShippingRateInput
+} from './shipping/core/createCoreShippingRate.js';
+export {
+  default as updateCoreShippingRate,
+  hookBeforeUpdateCoreShippingRate,
+  hookAfterUpdateCoreShippingRate
+} from './shipping/core/updateCoreShippingRate.js';
+export {
+  default as deleteCoreShippingRate,
+  hookBeforeDeleteCoreShippingRate,
+  hookAfterDeleteCoreShippingRate
+} from './shipping/core/deleteCoreShippingRate.js';
+
+// Helpers used by phase 3+ (cart resolver, orchestrator, REST endpoints).
+export { buildShippingContext } from './shipping/buildShippingContext.js';
+export {
+  computeFingerprintFromCart,
+  computeFingerprintFromCtx
+} from './shipping/computeFingerprint.js';
+export { getOriginAddress } from './shipping/getOriginAddress.js';
+export { resolveZonesForAddress } from './shipping/resolveZonesForAddress.js';
+export {
+  resolveShippingQuote,
+  ShippingQuoteError
+} from './shipping/resolveShippingQuote.js';
+export { serializeItems } from './shipping/serializeItems.js';

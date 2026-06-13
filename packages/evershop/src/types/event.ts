@@ -130,6 +130,66 @@ export interface EventDataRegistry {
     before: string;
     after: string;
   };
+
+  /**
+   * Fired after a shipment row has been inserted by `createShipment` and the
+   * order rollup has been recomputed. The transaction is already committed.
+   * Subscribers (lifecycle emails, webhook bridges) consume this.
+   * `notifyCustomer` reflects the admin's checkbox at creation time —
+   * subscribers must short-circuit when false.
+   */
+  shipment_created: {
+    shipmentId: number;
+    orderId: number;
+    notifyCustomer: boolean;
+  };
+
+  /**
+   * Fired when a shipment transitions to a status whose phase is `delivered`.
+   * Cross-checked against the registry's `phase` field. Always fires;
+   * customer notification gating belongs in the subscriber.
+   */
+  shipment_delivered: {
+    shipmentId: number;
+    orderId: number;
+  };
+
+  /**
+   * Fired on every shipment status write by `updateShipmentStatus`. Carries
+   * both the previous (`from`) and new (`to`) status codes plus the
+   * resolved `phase` of the new state.
+   */
+  shipment_status_changed: {
+    shipmentId: number;
+    orderId: number;
+    from: string;
+    to: string;
+    phase: 'pending' | 'shipped' | 'delivered' | 'canceled';
+  };
+
+  /**
+   * Fired when a carrier integration successfully purchases a label for a
+   * shipment. `labelUrl` may be null when the carrier returns only a tracking
+   * number (e.g. drop-off providers).
+   */
+  shipment_label_created: {
+    shipmentId: number;
+    orderId: number;
+    labelUrl: string | null;
+    trackingNumber: string | undefined;
+  };
+
+  /**
+   * Fired when an admin voids a previously purchased label via
+   * `voidShipmentLabel`. The tracking number stays on the shipment for
+   * historical record; only the label artifacts (`label_url`, `label_format`)
+   * are cleared.
+   */
+  shipment_label_voided: {
+    shipmentId: number;
+    orderId: number;
+    trackingNumber: string;
+  };
 }
 
 /**

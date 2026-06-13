@@ -78,6 +78,7 @@ export const query = `
       applyCouponApi
       removeCouponApi
       availableShippingMethods {
+        providerCode
         code
         name
         cost {

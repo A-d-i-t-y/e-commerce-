@@ -130,7 +130,20 @@ export function Form<T extends FieldValues = FieldValues>({
   return (
     <FormProvider {...theForm}>
       <form
-        onSubmit={handleSubmit(handleFormSubmit, onValidationError)}
+        onSubmit={(event) => {
+          // Nested forms must not submit this form. Dialogs render through
+          // React portals, and portals bubble events through the REACT tree
+          // (not the DOM tree) — so a popup form mounted inside this form
+          // (e.g. the core method editor inside the provider-settings page
+          // form) fires this handler too. Only handle submissions that
+          // originate from THIS form element, and stop our own submission
+          // from reaching ancestor forms.
+          if (event.target !== event.currentTarget) {
+            return;
+          }
+          event.stopPropagation();
+          handleSubmit(handleFormSubmit, onValidationError)(event);
+        }}
         className={className}
         noValidate={noValidate}
         {...props}

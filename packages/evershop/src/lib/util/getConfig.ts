@@ -6,6 +6,8 @@ type ConfigStructure = {
     timezone: string;
     currency: string;
     weightUnit: string;
+    /** Unit for package dimensions: 'cm' | 'mm' | 'in' (default 'cm'). */
+    dimensionUnit: string;
     homeUrl: string;
   };
   system: {
@@ -40,6 +42,16 @@ type ConfigStructure = {
         [key: string]: unknown;
       };
       reset_password?: {
+        enabled: boolean;
+        templatePath?: string | null;
+        [key: string]: unknown;
+      };
+      shipment_created?: {
+        enabled: boolean;
+        templatePath?: string | null;
+        [key: string]: unknown;
+      };
+      shipment_delivered?: {
         enabled: boolean;
         templatePath?: string | null;
         [key: string]: unknown;
@@ -129,15 +141,19 @@ type ConfigStructure = {
         }
       >;
       psoMapping: Record<string, string>;
+      shipmentRollupCancelable: {
+        pending?: boolean;
+        partially_shipped?: boolean;
+        shipped?: boolean;
+        partially_delivered?: boolean;
+        delivered?: boolean;
+        canceled?: boolean;
+      };
       reStockAfterCancellation: boolean;
     };
-    carriers: Record<
-      string,
-      {
-        name: string;
-        trackingUrl?: string;
-      }
-    >;
+    tracking: {
+      anonymousTokenTtlDays: number;
+    };
   };
 };
 
