@@ -27,6 +27,7 @@ interface AppStateContextValue {
 
 interface AppContextDispatchValue {
   setData: React.Dispatch<React.SetStateAction<AppStateContextValue>>;
+  setFetching: React.Dispatch<React.SetStateAction<boolean>>;
   fetchPageData: (url: string | URL) => Promise<void>;
 }
 

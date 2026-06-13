@@ -53,19 +53,19 @@ export default function BasicMenu({
   };
 
   return (
-    <div className={className}>
-      <div className="flex justify-start gap-4 items-center">
-        <nav className="p-2 relative md:flex md:justify-center w-full">
+    <div className={`evershop-basic-menu ${className ?? ''}`}>
+      <div className="evershop-basic-menu__inner flex justify-start gap-4 items-center">
+        <nav className="evershop-basic-menu__nav p-2 relative md:flex md:justify-center w-full">
           <div className="flex justify-between items-center w-full">
             {isMain && isMobile && (
-              <div>
+              <div className="evershop-basic-menu__toggle-wrapper">
                 <a
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
                     toggleMenu();
                   }}
-                  className="text-black focus:outline-none"
+                  className="evershop-basic-menu__toggle text-black focus:outline-none"
                 >
                   <svg
                     className="w-6 h-6"
@@ -86,6 +86,7 @@ export default function BasicMenu({
             )}
             <div
               className={cn(
+                'evershop-basic-menu__panel',
                 isMain
                   ? 'md:flex absolute md:relative -left-10 md:left-0 top-full md:top-auto mt-2 md:mt-0 w-screen md:w-auto p-2 md:p-0 min-w-62.5 bg-white md:bg-transparent z-30'
                   : 'flex relative -left-10 md:left-0 w-screen md:w-auto p-2 md:p-0 min-w-62.5 bg-white md:bg-transparent',
@@ -93,25 +94,25 @@ export default function BasicMenu({
                 'md:flex'
               )}
             >
-              <NavigationMenu className="w-full max-w-full">
-                <NavigationMenuList className="flex-col md:flex-row items-start md:items-center w-full md:w-auto">
+              <NavigationMenu className="evershop-basic-menu__menu w-full max-w-full">
+                <NavigationMenuList className="evershop-basic-menu__items flex-col md:flex-row items-start md:items-center w-full md:w-auto">
                   {menus.map((item) => (
                     <NavigationMenuItem
                       key={item.uuid}
-                      className="w-full md:w-auto"
+                      className="evershop-basic-menu__item w-full md:w-auto"
                     >
                       {item.children.length > 0 && !isMobile ? (
                         <>
-                          <NavigationMenuTrigger className="w-full md:w-auto justify-start md:justify-center bg-transparent hover:bg-transparent focus:bg-transparent data-open:bg-transparent data-open:hover:bg-transparent data-open:focus:bg-transparent data-popup-open:bg-transparent data-popup-open:hover:bg-transparent hover:font-semibold hover:text-primary">
+                          <NavigationMenuTrigger className="evershop-basic-menu__trigger w-full md:w-auto justify-start md:justify-center bg-transparent hover:bg-transparent focus:bg-transparent data-open:bg-transparent data-open:hover:bg-transparent data-open:focus:bg-transparent data-popup-open:bg-transparent data-popup-open:hover:bg-transparent hover:font-semibold hover:text-primary">
                             {item.name}
                           </NavigationMenuTrigger>
                           <NavigationMenuContent>
-                            <ul className="flex flex-col min-w-50 p-2">
+                            <ul className="evershop-basic-menu__subs flex flex-col min-w-50 p-2">
                               {item.children.map((subItem) => (
-                                <li key={subItem.uuid}>
+                                <li key={subItem.uuid} className="evershop-basic-menu__sub">
                                   <NavigationMenuLink
                                     href={subItem.url}
-                                    className="w-full"
+                                    className="evershop-basic-menu__sub-link w-full"
                                   >
                                     {subItem.name}
                                   </NavigationMenuLink>
@@ -123,7 +124,7 @@ export default function BasicMenu({
                       ) : (
                         <NavigationMenuLink
                           href={item.url}
-                          className="w-full md:w-auto px-4 py-2 hover:text-primary data-[active=true]:bg-transparent data-[active=true]:hover:bg-transparent transition-colors data-[active=true]:text-primary data-[active=true]:font-semibold hover:bg-transparent focus:bg-transparent hover:underline text-xl md:text-base"
+                          className="evershop-basic-menu__link w-full md:w-auto px-4 py-2 hover:text-primary data-[active=true]:bg-transparent data-[active=true]:hover:bg-transparent transition-colors data-[active=true]:text-primary data-[active=true]:font-semibold hover:bg-transparent focus:bg-transparent hover:underline text-xl md:text-base"
                           data-active={isActive(item.url)}
                         >
                           {item.name}

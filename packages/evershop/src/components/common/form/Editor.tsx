@@ -3,6 +3,7 @@ import { getColumnClasses } from '@components/common/form/editor/GetColumnClasse
 import { getRowClasses } from '@components/common/form/editor/GetRowClasses.js';
 import { RawToolWrapper } from '@components/common/form/editor/RawToolWrapper.js';
 import { RowTemplates } from '@components/common/form/editor/RowTemplates.js';
+import { useScopedFormContext } from '@components/common/page-builder/WidgetSettingsScope.js';
 import { Field, FieldLabel } from '@components/common/ui/Field.js';
 import {
   DndContext,
@@ -227,7 +228,7 @@ export const Editor: React.FC<EditorProps> = ({ name, value = [], label }) => {
     onUpload: (fileUrl: string) => void;
     onError: (error: string) => void;
   } | null>(null);
-  const { register, setValue } = useFormContext();
+  const { register, setValue } = useScopedFormContext();
   const [rows, setRows] = React.useState(
     value
       ? value.map((row) => {

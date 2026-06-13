@@ -59,6 +59,14 @@
       "import": "./dist/lib/widget/widgetManager.js",
       "types": "./dist/lib/widget/widgetManager.d.ts"
     },
+    "./lib/widget/linkResolver": {
+      "import": "./dist/lib/widget/linkResolver.js",
+      "types": "./dist/lib/widget/linkResolver.d.ts"
+    },
+    "./lib/urn": {
+      "import": "./dist/lib/urn/index.js",
+      "types": "./dist/lib/urn/index.d.ts"
+    },
     "./lib/cronjob": {
       "import": "./dist/lib/cronjob/jobManager.js",
       "types": "./dist/lib/cronjob/jobManager.d.ts"
@@ -188,6 +196,7 @@
     "express": "^4.21.2",
     "express-session": "^1.17.3",
     "fast-glob": "^3.3.3",
+    "fast-json-stable-stringify": "^2.1.0",
     "flatpickr": "^4.6.9",
     "graphql": "^16.6.0",
     "graphql-tag": "^2.12.6",

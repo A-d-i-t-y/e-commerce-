@@ -46,9 +46,13 @@ export default function Base({
       >
         <LoadingBar />
         <Header />
-        <main className="content">
-          <Area id="content" noOuter />
-        </main>
+        <Area
+          id="content"
+          className="content page-width"
+          isGlobal
+          wrapper="main"
+          editableInPageBuilder
+        />
         <Footer copyRight={themeConfig.copyRight} />
       </CartProvider>
     </CustomerProvider>

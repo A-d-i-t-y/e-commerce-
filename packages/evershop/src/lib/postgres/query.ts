@@ -59,7 +59,11 @@ import type {
   TaxRateRow,
   UrlRewriteRow,
   VariantGroupRow,
-  WidgetRow
+  WidgetInstanceRow,
+  WidgetPlacementRow,
+  ChangesetRow,
+  ChangesetOperationRow,
+  RolloutPlanRow
 } from '../../types/db/index.js';
 
 // ---- Known EverShop table names ------------------------------------------------
@@ -114,7 +118,11 @@ export type TableName =
   | 'url_rewrite'
   | 'user_token_secret'
   | 'variant_group'
-  | 'widget';
+  | 'widget_instance'
+  | 'widget_placement'
+  | 'changeset'
+  | 'changeset_operation'
+  | 'rollout_plan';
 
 // ---- Table → column mapping (derived from Row types, always stays in sync) -----
 
@@ -168,7 +176,11 @@ type TableColumnMap = {
   url_rewrite: keyof UrlRewriteRow;
   user_token_secret: never; // deprecated/removed table
   variant_group: keyof VariantGroupRow;
-  widget: keyof WidgetRow;
+  widget_instance: keyof WidgetInstanceRow;
+  widget_placement: keyof WidgetPlacementRow;
+  changeset: keyof ChangesetRow;
+  changeset_operation: keyof ChangesetOperationRow;
+  rollout_plan: keyof RolloutPlanRow;
 };
 
 /**
@@ -230,7 +242,11 @@ type TableRowMap = {
   url_rewrite: UrlRewriteRow;
   user_token_secret: Record<string, any>; // deprecated/removed table
   variant_group: VariantGroupRow;
-  widget: WidgetRow;
+  widget_instance: WidgetInstanceRow;
+  widget_placement: WidgetPlacementRow;
+  changeset: ChangesetRow;
+  changeset_operation: ChangesetOperationRow;
+  rollout_plan: RolloutPlanRow;
 };
 
 /**

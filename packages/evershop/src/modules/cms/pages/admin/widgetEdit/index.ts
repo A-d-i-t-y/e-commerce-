@@ -8,8 +8,9 @@ import { setPageMetaInfo } from '../../../services/pageMetaInfo.js';
 export default async (request, response: EvershopResponse, next) => {
   try {
     const query = select();
-    query.from('widget');
-    query.andWhere('widget.uuid', '=', request.params.id);
+    // Renamed in cms migration 1.3.0: widget → widget_instance.
+    query.from('widget_instance');
+    query.andWhere('widget_instance.uuid', '=', request.params.id);
     const widget = await query.load(pool);
     const enabledWidgets = getEnabledWidgets();
     if (
@@ -20,7 +21,10 @@ export default async (request, response: EvershopResponse, next) => {
       next();
     } else {
       setContextValue(request, 'type', widget.type);
-      setContextValue(request, 'widgetId', widget.widget_id);
+      // Keep the old context key name `widgetId` for backward compat with any
+      // GraphQL queries / templates that read it; the value is now the
+      // widget_instance_id.
+      setContextValue(request, 'widgetId', widget.widget_instance_id);
       setContextValue(request, 'widgetUuid', widget.uuid);
       setPageMetaInfo(request, {
         title: widget.name,

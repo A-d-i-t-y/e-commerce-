@@ -111,7 +111,14 @@ export function registerCartItemBaseFields(fields) {
       resolvers: [
         async function resolver() {
           const product = await this.getProduct();
-          return parseFloat(product.weight) ?? null;
+          // `parseFloat` returns NaN for null/undefined/empty/non-numeric
+          // strings (digital products, partially-seeded fixtures, etc.).
+          // `?? null` does NOT catch NaN — only null/undefined — so the
+          // previous version let NaN propagate into `total_weight`, which
+          // then broke `Cart.totalWeight.value: Float!` serialization with
+          // "Float cannot represent non numeric value: NaN".
+          const w = parseFloat(product.weight);
+          return Number.isFinite(w) ? w : 0;
         }
       ],
       dependencies: ['product_id']

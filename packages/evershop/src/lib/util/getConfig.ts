@@ -24,6 +24,7 @@ type ConfigStructure = {
       maxAge: number;
       resave: boolean;
       saveUninitialized: boolean;
+      rolling: boolean;
       cookieSecret: string;
       cookieName: string;
       adminCookieName: string;
