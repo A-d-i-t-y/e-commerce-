@@ -126,38 +126,38 @@ const SortableRow: React.FC<{
           >
             <path
               stroke="currentColor"
-              stroke-linecap="round"
-              stroke-width="2.6"
+              strokeLinecap="round"
+              strokeWidth="2.6"
               d="M9.40999 7.29999H9.4"
             ></path>
             <path
               stroke="currentColor"
-              stroke-linecap="round"
-              stroke-width="2.6"
+              strokeLinecap="round"
+              strokeWidth="2.6"
               d="M14.6 7.29999H14.59"
             ></path>
             <path
               stroke="currentColor"
-              stroke-linecap="round"
-              stroke-width="2.6"
+              strokeLinecap="round"
+              strokeWidth="2.6"
               d="M9.30999 12H9.3"
             ></path>
             <path
               stroke="currentColor"
-              stroke-linecap="round"
-              stroke-width="2.6"
+              strokeLinecap="round"
+              strokeWidth="2.6"
               d="M14.6 12H14.59"
             ></path>
             <path
               stroke="currentColor"
-              stroke-linecap="round"
-              stroke-width="2.6"
+              strokeLinecap="round"
+              strokeWidth="2.6"
               d="M9.40999 16.7H9.4"
             ></path>
             <path
               stroke="currentColor"
-              stroke-linecap="round"
-              stroke-width="2.6"
+              strokeLinecap="round"
+              strokeWidth="2.6"
               d="M14.6 16.7H14.59"
             ></path>
           </svg>

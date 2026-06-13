@@ -33,6 +33,9 @@ export type ProductData = ProductInventoryData & {
   attributes?: ProductAttributeData[],
   images?: string[],
   description?: Row[],
+  /** Reference to the `package` table (parcel size). Mandatory for shippable
+   *  products, null for virtual ones. Variant groups share one package. */
+  package_id?: number | string | null,
   [key: string]: unknown;
 };
 
@@ -68,11 +71,21 @@ function validateProductDataBeforeInsert(data: ProductData): ProductData {
   );
   const validate = ajv.compile(jsonSchema);
   const valid = validate(data);
-  if (valid) {
-    return data;
-  } else {
+  if (!valid) {
     throw new Error(validate.errors[0].message);
   }
+  // A package (parcel size) is mandatory for SHIPPABLE products — quotes and
+  // labels need its dimensions/tare. Virtual/downloadable products
+  // (no_shipping_required) are exempt. See wiki/package-management-design.md.
+  if (
+    !data.no_shipping_required &&
+    (data.package_id === undefined ||
+      data.package_id === null ||
+      data.package_id === '')
+  ) {
+    throw new Error('A package is required for shippable products');
+  }
+  return data;
 }
 
 async function insertProductInventory(inventoryData: ProductInventoryData, productId: number, connection: PoolClient): Promise<void> {
@@ -209,8 +222,13 @@ async function insertProductImages(images: string[], productId: number, connecti
 
 
 async function insertProductData(data: ProductData, connection: PoolClient): Promise<ProductRow & ProductDescriptionRow & { insertId: number }> {
-  // If no_shipping_required is true, set weight to 0
-  const productData = { ...data, weight: data.no_shipping_required ? 0 : data.weight };
+  // If no_shipping_required is true, set weight to 0 and drop the package —
+  // virtual products have no parcel.
+  const productData = {
+    ...data,
+    weight: data.no_shipping_required ? 0 : data.weight,
+    package_id: data.no_shipping_required ? null : data.package_id
+  };
   const product = await insert('product').given(productData).execute(connection);
   const description = await insert('product_description')
     .given(productData)

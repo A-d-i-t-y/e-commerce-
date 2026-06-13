@@ -31,6 +31,26 @@ export default {
     }
   },
   Cart: {
+    /**
+     * Re-shape the JSONB column into the camelCase GraphQL type. The DB JSONB
+     * keeps snake_case keys (matching the design doc); GraphQL exposes
+     * camelCase. Inner snapshot fields are already camelCase (ShippingMethod
+     * is defined that way in TS) so they pass through unchanged.
+     */
+    shippingMethodData: (cart) => {
+      const data = cart.shippingMethodData;
+      if (!data) return null;
+      return {
+        providerCode: data.provider_code,
+        methodCode: data.method_code,
+        snapshot: data.snapshot,
+        fingerprint: data.fingerprint,
+        quotedAt: data.quotedAt
+      };
+    },
+    /** Convenience: extract method display name from the JSONB snapshot. */
+    shippingMethodName: (cart) =>
+      cart.shippingMethodData?.snapshot?.name ?? null,
     items: async (cart) => {
       const items = cart.items || [];
       return items.map((item) => ({

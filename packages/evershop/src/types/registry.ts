@@ -9,6 +9,7 @@ import type { ProductData } from '../modules/catalog/services/product/createProd
 import type { WidgetData } from '../modules/cms/services/widget/createWidget.js';
 import type { CustomerData } from '../modules/customer/services/customer/createCustomer.js';
 import type { CouponData } from '../modules/promotion/services/coupon/createCoupon.js';
+import type { ShippingProvider } from './shippingProvider.js';
 
 /**
  * Registry that maps value names to their data types.
@@ -142,6 +143,15 @@ export interface ValueRegistry {
    * `Item` is implemented in JavaScript; cast to access specific members.
    */
   cartItemBeforeAdd: unknown;
+
+  // ── Shipping ──────────────────────────────────────────────────────────────
+
+  /**
+   * Registered shipping providers. Populated at bootstrap via
+   * `registerShippingProvider`; read at runtime by the listing resolver and
+   * the cart's `shipping_method_data` field resolver.
+   */
+  shippingProviders: ShippingProvider[];
 
   // ── PayPal ────────────────────────────────────────────────────────────────
 

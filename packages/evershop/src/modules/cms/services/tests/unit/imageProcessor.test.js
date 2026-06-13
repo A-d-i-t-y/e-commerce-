@@ -242,23 +242,18 @@ describe('Path safety validation', () => {
   });
 
   test('Should normalize paths correctly', async () => {
-    // Create a file with double slashes to test normalization
+    // The fixture lives at `root/media/double/slash/test.jpg` (committed).
+    // Passing the doubled-slash form should normalize to the same source and
+    // succeed. We do NOT unlink the fixture afterwards — earlier versions of
+    // this test did that, which left the second-and-later runs broken
+    // ("ENOENT: no such file or directory, unlink '.../root/media/double/slash/test.jpg'")
+    // because the fixture was already gone. The cached output that gets
+    // produced under `root/images/` is a separate artifact and is fine to
+    // leave behind; `beforeEach` doesn't clear it either way.
     const testPath = 'media//double//slash//test.jpg';
-    const normalizedPath = 'media/double/slash/test.jpg';
 
-    // Process should succeed with normalized path
     const result = await imageProcessor(testPath, 12, 12);
     expect(result).toBeTruthy();
-
-    // Clean up
-    await fs.unlink(path.join(ROOTPATH, normalizedPath));
-
-    // Try to remove directories (may fail if not empty, which is fine)
-    try {
-      await fs.rmdir(dirPath);
-    } catch (error) {
-      // Ignore errors
-    }
   });
 
   // Test for assets path handling with dynamic path resolution

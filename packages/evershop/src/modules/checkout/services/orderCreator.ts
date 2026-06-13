@@ -13,7 +13,7 @@ import { pool } from '../../../lib/postgres/connection.js';
 import { getConfig } from '../../../lib/util/getConfig.js';
 import { hookable, hookBefore, hookAfter } from '../../../lib/util/hookable.js';
 import type { OrderRow, InsertResultWithRow } from '../../../types/db/index.js';
-import { PaymentStatus, ShipmentStatus } from '../../../types/order.js';
+import { PaymentStatus } from '../../../types/order.js';
 import addOrderActivityLog from '../../oms/services/addOrderActivityLog.js';
 import { resolveOrderStatus } from '../../oms/services/updateOrderStatus.js';
 import { Cart } from './cart/Cart.js';
@@ -77,20 +77,18 @@ async function saveOrder<T = CreateOrderResult>(
   cart: Cart,
   connection: PoolClient
 ): Promise<T> {
-  const shipmentStatusList = getConfig(
-    'oms.order.shipmentStatus',
-    {}
-  ) as Record<string, ShipmentStatus>;
   const paymentStatusList = getConfig('oms.order.paymentStatus', {}) as Record<
     string,
     PaymentStatus
   >;
-  let defaultShipmentStatus;
-  Object.keys(shipmentStatusList).forEach((key) => {
-    if (shipmentStatusList[key].isDefault) {
-      defaultShipmentStatus = key;
-    }
-  });
+  // `order.shipment_status` holds an order-level ROLLUP value (one of
+  // `pending` / `partially_shipped` / `shipped` / `partially_delivered` /
+  // `delivered` / `canceled`), not a per-shipment status code. A brand-new
+  // order has zero shipments by construction → the rollup is `pending`
+  // ("no items shipped yet"). Hardcoded here; the rollup recompute that
+  // runs after the order items are inserted will overwrite this if the
+  // order is all-digital (→ rollup short-circuits to `delivered`).
+  const defaultShipmentStatus = 'pending';
 
   let defaultPaymentStatus;
   Object.keys(paymentStatusList).forEach((key) => {
@@ -189,6 +187,17 @@ async function createOrderFunc<T extends CreateOrderResult>(cart: Cart) {
 
     // Save order items
     await hookable(saveOrderItems, { cart })(cart, order.insertId, connection);
+
+    // Multi-shipment refactor (A3): recompute order.shipment_status from the
+    // rollup now that items are in the DB. For all-digital orders this writes
+    // `'delivered'` (vacuously true — no shippable items). For physical orders
+    // it stays `'pending'`. The bootstrap `hookAfter('changeShipmentStatus')`
+    // re-runs psoMapping so order.status reflects the new shipment_status.
+    // Replaces the legacy `createShipmentForVirtualProductsOrder` hook.
+    const { recomputeOrderShipmentStatus } = await import(
+      '../../oms/services/recomputeOrderShipmentStatus.js'
+    );
+    await recomputeOrderShipmentStatus(order.insertId, connection);
 
     // Save order activity
     await addOrderActivityLog(
