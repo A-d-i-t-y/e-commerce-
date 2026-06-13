@@ -4,6 +4,7 @@ import { RadioGroupField } from '@components/common/form/RadioGroupField.js';
 import { SelectField } from '@components/common/form/SelectField.js';
 import { ToggleField } from '@components/common/form/ToggleField.js';
 import { Button } from '@components/common/ui/Button.js';
+import { ConfirmDialog } from '@components/common/ui/ConfirmDialog.js';
 import axios from 'axios';
 import React from 'react';
 import { useForm } from 'react-hook-form';
@@ -153,8 +154,6 @@ export function RatePanel({
 
   const remove = async () => {
     if (!existing) return;
-    if (!confirm('Remove this rate? Method will no longer apply to this zone.'))
-      return;
     try {
       await axios.delete(existing.deleteApi);
       toast.success('Rate removed');
@@ -267,9 +266,18 @@ export function RatePanel({
 
         <div className="flex justify-between pt-3 border-t border-border">
           {existing ? (
-            <Button type="button" variant="destructive" onClick={remove}>
-              Remove rate
-            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button type="button" variant="destructive">
+                  Remove rate
+                </Button>
+              }
+              title="Remove this rate?"
+              description="The method will no longer apply to this zone."
+              confirmLabel="Remove rate"
+              confirmVariant="destructive"
+              onConfirm={remove}
+            />
           ) : (
             <span />
           )}

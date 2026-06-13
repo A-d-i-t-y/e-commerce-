@@ -1,5 +1,6 @@
 import Spinner from '@components/admin/Spinner.jsx';
 import { Button } from '@components/common/ui/Button.js';
+import { ConfirmDialog } from '@components/common/ui/ConfirmDialog.js';
 import {
   Dialog,
   DialogContent,
@@ -129,8 +130,6 @@ export function MethodsList() {
   }>;
 
   const deleteMethod = async (uuid: string, name: string) => {
-    if (!confirm(`Delete method "${name}"? Its rates will be removed too.`))
-      return;
     try {
       await axios.delete(`/api/shippingProviders/core/methods/${uuid}`);
       toast.success(`Deleted ${name}`);
@@ -176,13 +175,18 @@ export function MethodsList() {
                   >
                     Edit
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => deleteMethod(m.uuid, m.name)}
-                  >
-                    Delete
-                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="destructive" size="sm">
+                        Delete
+                      </Button>
+                    }
+                    title={`Delete "${m.name}"?`}
+                    description="Its rates will be removed too. This cannot be undone."
+                    confirmLabel="Delete"
+                    confirmVariant="destructive"
+                    onConfirm={() => deleteMethod(m.uuid, m.name)}
+                  />
                 </TableCell>
               </TableRow>
             ))

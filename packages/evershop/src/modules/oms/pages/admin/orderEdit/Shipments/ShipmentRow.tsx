@@ -1,15 +1,5 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger
-} from '@components/common/ui/AlertDialog.js';
 import { Button } from '@components/common/ui/Button.js';
+import { ConfirmDialog } from '@components/common/ui/ConfirmDialog.js';
 import { Label } from '@components/common/ui/Label.js';
 import { _ } from '@evershop/evershop/lib/locale/translate/_';
 import axios from 'axios';
@@ -18,67 +8,6 @@ import React from 'react';
 import { toast } from 'react-toastify';
 import { hasTrackingCapability } from './carrierCaps.js';
 import { PhaseBadge } from './phaseBadge.js';
-
-/**
- * Small wrapper that pops a shadcn AlertDialog when its trigger is clicked
- * and runs `onConfirm` if the user picks the affirmative action. Replaces
- * the browser-native `window.confirm()` for the destructive shipment actions
- * (Mark delivered, Cancel shipment, Void label) so they share visual
- * language with the rest of admin.
- *
- * The button passed via `trigger` is rendered as the AlertDialogTrigger —
- * its onClick is consumed by the dialog open machinery. The `onConfirm`
- * handler does the real API call; the dialog closes automatically after
- * it resolves (success OR failure — the toast surfaces the error).
- */
-function ConfirmAction({
-  trigger,
-  title,
-  description,
-  confirmLabel,
-  confirmVariant = 'default',
-  onConfirm
-}: {
-  trigger: React.ReactElement;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  confirmVariant?: 'default' | 'destructive';
-  onConfirm: () => Promise<void>;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const handleConfirm = async () => {
-    setBusy(true);
-    try {
-      await onConfirm();
-    } finally {
-      setBusy(false);
-      setOpen(false);
-    }
-  };
-  return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger render={trigger} />
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{_('Cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            variant={confirmVariant}
-            onClick={handleConfirm}
-            isLoading={busy}
-          >
-            {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
 
 export interface ShipmentItem {
   uuid: string;
@@ -189,8 +118,8 @@ export function ShipmentRow({
     }
   ].filter(Boolean) as Array<{ label: string; date: string }>;
 
-  // Confirmation now lives in the wrapping ConfirmAction component
-  // (shadcn AlertDialog). These handlers just do the API call + toast +
+  // Confirmation now lives in the wrapping ConfirmDialog component
+  // (shared, shadcn AlertDialog). These handlers just do the API call + toast +
   // reload; the dialog closes itself after onConfirm resolves.
   const handleMarkDelivered = async () => {
     try {
@@ -315,7 +244,7 @@ export function ShipmentRow({
           <div className="flex flex-wrap items-center gap-2">
             {shipment.phase !== 'delivered' &&
               shipment.phase !== 'canceled' && (
-                <ConfirmAction
+                <ConfirmDialog
                   trigger={
                     <Button size="sm" variant="default">
                       <Check className="size-4" />
@@ -341,7 +270,7 @@ export function ShipmentRow({
               </Button>
             )}
             {shipment.phase !== 'delivered' && (
-              <ConfirmAction
+              <ConfirmDialog
                 trigger={
                   <Button
                     variant="destructive"
@@ -371,7 +300,7 @@ export function ShipmentRow({
               </Button>
             )}
             {canVoidLabel && (
-              <ConfirmAction
+              <ConfirmDialog
                 trigger={
                   <Button variant="outline" size="sm">
                     {_('Void Label')}

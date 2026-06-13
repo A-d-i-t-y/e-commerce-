@@ -1,5 +1,6 @@
 import { Button } from '@components/common/ui/Button.js';
 import { CardContent } from '@components/common/ui/Card.js';
+import { ConfirmDialog } from '@components/common/ui/ConfirmDialog.js';
 import {
   Dialog,
   DialogContent,
@@ -71,7 +72,6 @@ export function Zone({ zone, reload }: ZoneProps) {
   );
 
   const detach = async (providerCode: string, providerName: string) => {
-    if (!confirm(`Detach ${providerName} from ${zone.name}?`)) return;
     try {
       await axios.delete(
         `/api/shippingZones/${zone.uuid}/providers/${providerCode}`
@@ -84,7 +84,6 @@ export function Zone({ zone, reload }: ZoneProps) {
   };
 
   const removeZone = async () => {
-    if (!confirm(`Delete zone "${zone.name}"?`)) return;
     try {
       const response = await axios.delete(zone.deleteApi);
       if (response.status === 200) {
@@ -126,13 +125,21 @@ export function Zone({ zone, reload }: ZoneProps) {
               />
             </DialogContent>
           </Dialog>
-          <button
-            type="button"
-            className="text-destructive cursor-pointer"
-            onClick={() => removeZone()}
-          >
-            Remove Zone
-          </button>
+          <ConfirmDialog
+            trigger={
+              <button
+                type="button"
+                className="text-destructive cursor-pointer"
+              >
+                Remove Zone
+              </button>
+            }
+            title={`Delete zone "${zone.name}"?`}
+            description="This removes the zone along with its provider attachments and rates. This cannot be undone."
+            confirmLabel="Delete zone"
+            confirmVariant="destructive"
+            onConfirm={removeZone}
+          />
         </div>
       </div>
 
@@ -235,15 +242,20 @@ export function Zone({ zone, reload }: ZoneProps) {
                           Configure
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="text-destructive"
-                        onClick={() =>
+                      <ConfirmDialog
+                        trigger={
+                          <button type="button" className="text-destructive">
+                            Detach
+                          </button>
+                        }
+                        title={`Detach ${zp.provider.name}?`}
+                        description={`Customers in ${zone.name} will no longer see ${zp.provider.name}'s methods at checkout. You can re-attach it later.`}
+                        confirmLabel="Detach"
+                        confirmVariant="destructive"
+                        onConfirm={() =>
                           detach(zp.provider.code, zp.provider.name)
                         }
-                      >
-                        Detach
-                      </button>
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

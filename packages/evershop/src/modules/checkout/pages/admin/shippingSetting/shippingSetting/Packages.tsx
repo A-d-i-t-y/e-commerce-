@@ -2,6 +2,7 @@ import { PackageForm, PackageData } from '@components/admin/PackageForm.js';
 import Spinner from '@components/admin/Spinner.jsx';
 import { Badge } from '@components/common/ui/Badge.js';
 import { Button } from '@components/common/ui/Button.js';
+import { ConfirmDialog } from '@components/common/ui/ConfirmDialog.js';
 import {
   Dialog,
   DialogContent,
@@ -61,8 +62,6 @@ export function Packages() {
   const weightUnit = data?.setting?.weightUnit ?? 'kg';
 
   const onDelete = async (pkg: PackageData) => {
-     
-    if (!window.confirm(`Delete package "${pkg.name}"?`)) return;
     const response = await axios.delete(pkg.deleteApi, {
       validateStatus: () => true
     });
@@ -108,20 +107,28 @@ export function Packages() {
                 >
                   Edit
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  disabled={pkg.isDefault}
-                  title={
-                    pkg.isDefault
-                      ? 'The default package cannot be deleted'
-                      : undefined
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      disabled={pkg.isDefault}
+                      title={
+                        pkg.isDefault
+                          ? 'The default package cannot be deleted'
+                          : undefined
+                      }
+                    >
+                      Delete
+                    </Button>
                   }
-                  onClick={() => onDelete(pkg)}
-                >
-                  Delete
-                </Button>
+                  title={`Delete package "${pkg.name}"?`}
+                  description="This cannot be undone. Packages still assigned to products can't be removed."
+                  confirmLabel="Delete"
+                  confirmVariant="destructive"
+                  onConfirm={() => onDelete(pkg)}
+                />
               </td>
             </tr>
           ))}
